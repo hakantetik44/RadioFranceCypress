@@ -9,7 +9,6 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 script {
-                    // Node.js bağımlılıklarını yüklüyoruz
                     sh "${NODEJS_HOME}/bin/npm install"
                 }
             }
@@ -18,7 +17,6 @@ pipeline {
         stage('Run Cypress Tests') {
             steps {
                 script {
-                    // Cypress testlerini çalıştırıyoruz
                     sh """
                         npx cypress run --browser electron --headless --reporter junit --reporter-options 'mochaFile=cypress/results/results-[hash].xml'
                     """
@@ -28,7 +26,6 @@ pipeline {
         
         stage('Archive Results') {
             steps {
-                // JUnit raporlarını arşivliyoruz
                 junit 'cypress/results/*.xml'
             }
         }
@@ -36,8 +33,10 @@ pipeline {
 
     post {
         always {
-            // Her durumda log dosyalarını temizliyoruz
-            cleanWs()
+            script {
+                // İşlemler tamamlandıktan sonra workspace'yi temizliyoruz
+                cleanWs()
+            }
         }
         success {
             echo 'Tests ran successfully!'
