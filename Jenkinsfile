@@ -7,6 +7,7 @@ pipeline {
     
     environment {
         CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
+        VIDEO_FOLDER = "${WORKSPACE}/cypress/videos"
     }
     
     stages {
@@ -24,7 +25,6 @@ pipeline {
 
         stage('Prepare Cypress Cache') {
             steps {
-                // Cypress cache klasörünü oluştur
                 sh 'mkdir -p $CYPRESS_CACHE_FOLDER'
             }
         }
@@ -32,13 +32,13 @@ pipeline {
         stage('Run Cypress Tests') {
             steps {
                 sh '''
-                    npx cypress verify || exit 0  # Cypress'i doğrulamak için
+                    npx cypress verify || exit 0
                     npx cypress run \
                     --browser electron \
                     --headless \
                     --reporter mocha \
                     --reporter-options "reportDir=cypress/results,overwrite=false,html=false,json=true" \
-                    --config defaultCommandTimeout=60000
+                    --config defaultCommandTimeout=60000,video=true
                 '''
             }
         }
@@ -47,6 +47,7 @@ pipeline {
     post {
         always {
             junit allowEmptyResults: true, testResults: 'cypress/results/*.xml'
+            archiveArtifacts artifacts: 'cypress/videos/**/*', fingerprint: true
         }
         cleanup {
             cleanWs()
