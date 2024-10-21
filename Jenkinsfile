@@ -47,7 +47,17 @@ pipeline {
                         sh '''
                             cat cypress_output.log | \
                             sed -e 's/\\x1b\\[[0-9;]*m//g' | \
-                            grep -E "^\\s*(✓|✖|it|describe|\\d+\\))" | \
+                            sed -e '/^$/d' | \
+                            sed -e '/^Opening Cypress/d' | \
+                            sed -e '/^DevTools listening/d' | \
+                            sed -e '/^Opening.*failed/d' | \
+                            sed -e '/^tput:/d' | \
+                            sed -e '/^===/d' | \
+                            sed -e '/^  (Run Starting)/d' | \
+                            sed -e '/^  │/d' | \
+                            sed -e '/^  └/d' | \
+                            sed -e 's/^  Running:/Test Dosyası:/' | \
+                            grep -E "^(Test Dosyası:|\\s*✓|\\s*✖|describe|it|\\d+\\))" | \
                             sed -e 's/^[[:space:]]*//' | \
                             sed -e 's/^✓/[BAŞARILI]/' | \
                             sed -e 's/^✖/[BAŞARISIZ]/' | \
