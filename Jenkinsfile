@@ -34,8 +34,7 @@ pipeline {
                 script {
                     try {
                         sh '''
-                            npx cypress verify
-                            CYPRESS_CONSOLE_OUTPUT=true npx cypress run \
+                            npx cypress run \
                             --browser electron \
                             --headless \
                             --config defaultCommandTimeout=60000 \
@@ -47,10 +46,13 @@ pipeline {
                     } finally {
                         echo "Cypress Test Sonuçları:"
                         sh '''
-                            cat cypress_output.log | sed -e 's/\\x1b\\[[0-9;]*m//g' | \
-                            grep -E "^(Running:|✓|×|\\s*●|Tests:|Passing:|Failing:|Pending:|Skipped:|Duration:|Spec Ran:)" | \
+                            cat cypress_output.log | \
+                            sed -e 's/\\x1b\\[[0-9;]*m//g' | \
+                            grep -E "^(Running:|\\s*✓|\\s*✖|Page|Cookies|Titre|Menu|Lien|Tests:|Passing:|Failing:|Pending:|Skipped:|Duration:|Spec Ran:)" | \
                             sed -e 's/^[[:space:]]*//' | \
-                            grep -v "^[[:space:]]*$"
+                            sed -e 's/^Running:/Test Dosyası:/' | \
+                            sed -e 's/^✓/[BAŞARILI]/' | \
+                            sed -e 's/^✖/[BAŞARISIZ]/'
                         '''
                     }
                 }
