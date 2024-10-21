@@ -1,14 +1,19 @@
 pipeline {
     agent any
-    
-    tools {
-        nodejs 'NodeJS' // Assurez-vous que 'NodeJS' est configuré dans les outils Jenkins
-    }
 
     stages {
         stage('Checkout') {
             steps {
                 git url: 'https://github.com/hakantetik44/RadioFranceCypress.git', branch: 'main'
+            }
+        }
+        
+        stage('Setup Node.js') {
+            steps {
+                sh 'which node || echo "Node.js not found"'
+                sh 'which npm || echo "npm not found"'
+                sh 'node -v || echo "Node.js not available"'
+                sh 'npm -v || echo "npm not available"'
             }
         }
         
