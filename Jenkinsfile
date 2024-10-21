@@ -38,8 +38,6 @@ pipeline {
                             CYPRESS_CONSOLE_OUTPUT=true npx cypress run \
                             --browser electron \
                             --headless \
-                            --reporter mochawesome \
-                            --reporter-options reportDir=cypress/results,overwrite=false,html=true,json=true \
                             --config defaultCommandTimeout=60000 \
                             | tee cypress_output.log
                         '''
@@ -57,7 +55,7 @@ pipeline {
     
     post {
         always {
-            archiveArtifacts artifacts: 'cypress/videos/**/*.mp4,cypress/screenshots/**/*.png,cypress/results/**/*,cypress_output.log', allowEmptyArchive: true
+            archiveArtifacts artifacts: 'cypress/videos/**/*.mp4,cypress/screenshots/**/*.png,cypress_output.log', allowEmptyArchive: true
         }
         success {
             echo "Tests passed successfully!"
