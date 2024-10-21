@@ -7,7 +7,6 @@ pipeline {
     
     environment {
         CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
-        TERM = 'dumb'
     }
     
     stages {
@@ -48,11 +47,25 @@ pipeline {
                         sh '''
                             cat cypress_output.log | \
                             sed -e 's/\\x1b\\[[0-9;]*m//g' | \
-                            grep -E "^(Running:|\\s*✓|\\s*✖|Page|Cookies|Titre|Menu|Lien|Tests:|Passing:|Failing:|Pending:|Skipped:|Duration:|Spec Ran:)" | \
+                            grep -E "^\\s*(✓|✖|it|describe|\\d+\\))" | \
                             sed -e 's/^[[:space:]]*//' | \
-                            sed -e 's/^Running:/Test Dosyası:/' | \
                             sed -e 's/^✓/[BAŞARILI]/' | \
-                            sed -e 's/^✖/[BAŞARISIZ]/'
+                            sed -e 's/^✖/[BAŞARISIZ]/' | \
+                            sed -e 's/^describe/Test Grubu:/' | \
+                            sed -e 's/^it/Test:/' | \
+                            sed -e 's/^[0-9])/Test /'
+                        '''
+                        
+                        echo "Test Özeti:"
+                        sh '''
+                            cat cypress_output.log | \
+                            sed -e 's/\\x1b\\[[0-9;]*m//g' | \
+                            grep -E "^\\s*(✓|✖|passing|failing|pending|duration)" | \
+                            sed -e 's/^[[:space:]]*//' | \
+                            sed -e 's/passing/Geçen Test Sayısı:/' | \
+                            sed -e 's/failing/Başarısız Test Sayısı:/' | \
+                            sed -e 's/pending/Bekleyen Test Sayısı:/' | \
+                            sed -e 's/duration/Toplam Süre:/'
                         '''
                     }
                 }
@@ -65,10 +78,10 @@ pipeline {
             archiveArtifacts artifacts: 'cypress/videos/**/*.mp4,cypress/screenshots/**/*.png,cypress_output.log', allowEmptyArchive: true
         }
         success {
-            echo "Tüm testler başarıyla geçti!"
+            echo "Tüm testler başarıyla tamamlandı!"
         }
         failure {
-            echo "Testler başarısız oldu. Lütfen logları kontrol edin."
+            echo "Testlerde hatalar var. Lütfen log dosyalarını kontrol edin."
         }
         cleanup {
             cleanWs()
