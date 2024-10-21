@@ -1,0 +1,143 @@
+{
+  "stats": {
+    "suites": 1,
+    "tests": 3,
+    "passes": 3,
+    "pending": 0,
+    "failures": 0,
+    "start": "2024-10-21T22:53:28.212Z",
+    "end": "2024-10-21T22:53:38.890Z",
+    "duration": 10678,
+    "testsRegistered": 3,
+    "passPercent": 100,
+    "pendingPercent": 0,
+    "other": 0,
+    "hasOther": false,
+    "skipped": 0,
+    "hasSkipped": false
+  },
+  "results": [
+    {
+      "uuid": "005aae71-54a3-4001-9ac4-785f8bcdb301",
+      "title": "",
+      "fullFile": "cypress/e2e/RadioFrance.cy.js",
+      "file": "cypress/e2e/RadioFrance.cy.js",
+      "beforeHooks": [],
+      "afterHooks": [],
+      "tests": [],
+      "suites": [
+        {
+          "uuid": "33deb580-20cf-4a01-add9-1215ec919fba",
+          "title": "Fonctionnalités de base de France Culture",
+          "fullFile": "",
+          "file": "",
+          "beforeHooks": [],
+          "afterHooks": [],
+          "tests": [
+            {
+              "title": "charge la page d'accueil et vérifie le titre",
+              "fullTitle": "Fonctionnalités de base de France Culture charge la page d'accueil et vérifie le titre",
+              "timedOut": null,
+              "duration": 2642,
+              "state": "passed",
+              "speed": "fast",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "cy.title().should('include', 'France Culture').then(title => {\n  cy.log(`Titre de la page: ${title}`);\n  cy.task('log', `Titre de la page: ${title}`);\n});",
+              "err": {},
+              "uuid": "cb5cc309-2245-406a-8974-77ca1f46a56e",
+              "parentUUID": "33deb580-20cf-4a01-add9-1215ec919fba",
+              "isHook": false,
+              "skipped": false
+            },
+            {
+              "title": "vérifie le menu principal",
+              "fullTitle": "Fonctionnalités de base de France Culture vérifie le menu principal",
+              "timedOut": null,
+              "duration": 3364,
+              "state": "passed",
+              "speed": "fast",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "cy.get('nav[role=\"navigation\"][aria-label=\"menu principal\"]').should('be.visible').then(() => {\n  cy.log('Menu principal trouvé');\n  cy.task('log', 'Menu principal trouvé');\n});\ncy.get('nav[role=\"navigation\"][aria-label=\"menu principal\"] ul li').should('have.length.at.least', 5).then(items => {\n  cy.log(`Nombre d'éléments dans le menu principal: ${items.length}`);\n  cy.task('log', `Nombre d'éléments dans le menu principal: ${items.length}`);\n});",
+              "err": {},
+              "uuid": "9170c29d-94e1-41b4-8093-fccb3fc152c4",
+              "parentUUID": "33deb580-20cf-4a01-add9-1215ec919fba",
+              "isHook": false,
+              "skipped": false
+            },
+            {
+              "title": "vérifie le lien de recherche",
+              "fullTitle": "Fonctionnalités de base de France Culture vérifie le lien de recherche",
+              "timedOut": null,
+              "duration": 1929,
+              "state": "passed",
+              "speed": "fast",
+              "pass": true,
+              "fail": false,
+              "pending": false,
+              "context": null,
+              "code": "cy.get('a[href=\"/recherche\"]').should('be.visible').then(() => {\n  cy.log('Lien de recherche trouvé');\n  cy.task('log', 'Lien de recherche trouvé');\n});",
+              "err": {},
+              "uuid": "226f54c2-93fd-4603-9caf-b900337c4a53",
+              "parentUUID": "33deb580-20cf-4a01-add9-1215ec919fba",
+              "isHook": false,
+              "skipped": false
+            }
+          ],
+          "suites": [],
+          "passes": [
+            "cb5cc309-2245-406a-8974-77ca1f46a56e",
+            "9170c29d-94e1-41b4-8093-fccb3fc152c4",
+            "226f54c2-93fd-4603-9caf-b900337c4a53"
+          ],
+          "failures": [],
+          "pending": [],
+          "skipped": [],
+          "duration": 7935,
+          "root": false,
+          "rootEmpty": false,
+          "_timeout": 2000
+        }
+      ],
+      "passes": [],
+      "failures": [],
+      "pending": [],
+      "skipped": [],
+      "duration": 0,
+      "root": true,
+      "rootEmpty": true,
+      "_timeout": 2000
+    }
+  ],
+  "meta": {
+    "mocha": {
+      "version": "7.0.1"
+    },
+    "mochawesome": {
+      "options": {
+        "quiet": false,
+        "reportFilename": "mochawesome",
+        "saveHtml": false,
+        "saveJson": true,
+        "consoleReporter": "spec",
+        "useInlineDiffs": false,
+        "code": true
+      },
+      "version": "7.1.3"
+    },
+    "marge": {
+      "options": {
+        "reportDir": "cypress/results",
+        "overwrite": false,
+        "html": false,
+        "json": true
+      },
+      "version": "6.2.0"
+    }
+  }
+}

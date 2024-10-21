@@ -1,0 +1,74 @@
+
+====================================================================================================
+
+  (Run Starting)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Cypress:        13.15.0                                                                        │
+  │ Browser:        Electron 118 (headless)                                                        │
+  │ Node Version:   v22.9.0 (/usr/local/Cellar/node/22.9.0_1/bin/node)                             │
+  │ Specs:          1 found (RadioFrance.cy.js)                                                    │
+  │ Searched:       cypress/e2e/**/*.cy.{js,jsx,ts,tsx}                                            │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+  Running:  RadioFrance.cy.js                                                               (1 of 1)
+
+
+  Fonctionnalités de base de France Culture
+Page France Culture chargée
+Pas de bannière de cookies détectée
+Titre de la page: France Culture – Écouter la radio en direct et podcasts gratuitement
+    ✓ charge la page d'accueil et vérifie le titre
+Page France Culture chargée
+Cookies acceptés
+Menu principal trouvé
+Nombre d'éléments dans le menu principal: 35
+    ✓ vérifie le menu principal
+Page France Culture chargée
+Pas de bannière de cookies détectée
+Lien de recherche trouvé
+    ✓ vérifie le lien de recherche
+
+
+  3 passing (11s)
+
+[mochawesome] Report JSON saved to /Users/hakan/Desktop/RadioFranceCypress/cypress/results/mochawesome.json
+
+
+  (Results)
+
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ Tests:        3                                                                                │
+  │ Passing:      3                                                                                │
+  │ Failing:      0                                                                                │
+  │ Pending:      0                                                                                │
+  │ Skipped:      0                                                                                │
+  │ Screenshots:  0                                                                                │
+  │ Video:        true                                                                             │
+  │ Duration:     10 seconds                                                                       │
+  │ Spec Ran:     RadioFrance.cy.js                                                                │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+
+  (Video)
+
+  -  Started compressing: Compressing to 32 CRF                                                     
+  -  Finished compressing: 3 seconds                                                 
+
+  -  Video output: /Users/hakan/Desktop/RadioFranceCypress/cypress/videos/RadioFrance.cy.js.mp4
+
+
+====================================================================================================
+
+  (Run Finished)
+
+
+       Spec                                              Tests  Passing  Failing  Pending  Skipped  
+  ┌────────────────────────────────────────────────────────────────────────────────────────────────┐
+  │ ✔  RadioFrance.cy.js                        00:10        3        3        -        -        - │
+  └────────────────────────────────────────────────────────────────────────────────────────────────┘
+    ✔  All specs passed!                        00:10        3        3        -        -        -  
+
