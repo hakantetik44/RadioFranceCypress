@@ -12,27 +12,23 @@ pipeline {
             steps {
                 sh '''
                     echo "PATH = $PATH"
-                    which node || echo "Node.js not found in PATH"
-                    which npm || echo "npm not found in PATH"
-                    node -v || echo "Node.js is not installed or not accessible"
-                    npm -v || echo "npm is not installed or not accessible"
+                    node -v || echo "Node.js çalıştırılamadı"
+                    npm -v || echo "npm çalıştırılamadı"
+                    which node
+                    which npm
                 '''
             }
         }
         
         stage('Install Dependencies') {
             steps {
-                sh '''
-                    npm install || (echo "npm install failed. Trying with sudo..." && sudo npm install)
-                '''
+                sh 'npm install --no-optional'
             }
         }
         
         stage('Run Cypress Tests') {
             steps {
-                sh '''
-                    npx cypress run --reporter junit --reporter-options "mochaFile=cypress/results/results-[hash].xml" || echo "Cypress tests failed"
-                '''
+                sh 'npx cypress run --reporter junit --reporter-options "mochaFile=cypress/results/results-[hash].xml"'
             }
         }
     }
