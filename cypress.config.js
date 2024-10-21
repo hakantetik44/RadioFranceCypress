@@ -8,9 +8,11 @@ module.exports = defineConfig({
     video: false,
     screenshotOnRunFailure: false,
   },
-  reporter: 'mocha-junit-reporter',
+  reporter: 'mocha',
   reporterOptions: {
-    mochaFile: 'cypress/results/results.xml',
-    toConsole: true,
-  },
+    reportDir: 'cypress/results',
+    overwrite: false,
+    html: false,
+    json: true
+  }
 })
