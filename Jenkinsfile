@@ -7,7 +7,7 @@ pipeline {
     
     environment {
         CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
-        VIDEO_FOLDER = "${WORKSPACE}/cypress/videos"
+        TERM = 'dumb'
     }
     
     stages {
@@ -38,7 +38,8 @@ pipeline {
                     --headless \
                     --reporter mocha \
                     --reporter-options "reportDir=cypress/results,overwrite=false,html=false,json=true" \
-                    --config defaultCommandTimeout=60000,video=true
+                    --config defaultCommandTimeout=60000 \
+                    --quiet
                 '''
             }
         }
@@ -47,7 +48,6 @@ pipeline {
     post {
         always {
             junit allowEmptyResults: true, testResults: 'cypress/results/*.xml'
-            archiveArtifacts artifacts: 'cypress/videos/**/*', fingerprint: true
         }
         cleanup {
             cleanWs()
