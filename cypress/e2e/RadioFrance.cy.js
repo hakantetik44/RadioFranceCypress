@@ -1,19 +1,19 @@
-/// <reference types="cypress" />
+<reference types="cypress" />
 
 describe('Fonctionnalités de base de France Culture', () => {
   beforeEach(() => {
     cy.visit('https://www.franceculture.fr/');
-    cy.task('log', 'Page France Culture chargée');
+    console.log('Page France Culture chargée');
 
     // Gestion des cookies
     cy.get('body').then(($body) => {
       if ($body.find('span:contains("Tout accepter")').length > 0) {
         cy.contains('span', 'Tout accepter').click();
         cy.log('Cookies acceptés');
-        cy.task('log', 'Cookies acceptés');
+        console.log('Cookies acceptés');
       } else {
         cy.log('Pas de bannière de cookies détectée');
-        cy.task('log', 'Pas de bannière de cookies détectée');
+        console.log('Pas de bannière de cookies détectée');
       }
     });
   });
@@ -22,7 +22,7 @@ describe('Fonctionnalités de base de France Culture', () => {
     cy.title().should('include', 'France Culture')
       .then((title) => {
         cy.log(`Titre de la page: ${title}`);
-        cy.task('log', `Titre de la page: ${title}`);
+        console.log(`Titre de la page: ${title}`);
       });
   });
 
@@ -30,12 +30,12 @@ describe('Fonctionnalités de base de France Culture', () => {
     cy.get('nav[role="navigation"][aria-label="menu principal"]').should('be.visible')
       .then(() => {
         cy.log('Menu principal trouvé');
-        cy.task('log', 'Menu principal trouvé');
+        console.log('Menu principal trouvé');
       });
     cy.get('nav[role="navigation"][aria-label="menu principal"] ul li').should('have.length.at.least', 5)
       .then((items) => {
         cy.log(`Nombre d'éléments dans le menu principal: ${items.length}`);
-        cy.task('log', `Nombre d'éléments dans le menu principal: ${items.length}`);
+        console.log(`Nombre d'éléments dans le menu principal: ${items.length}`);
       });
   });
 
@@ -43,7 +43,7 @@ describe('Fonctionnalités de base de France Culture', () => {
     cy.get('a[href="/recherche"]').should('be.visible')
       .then(() => {
         cy.log('Lien de recherche trouvé');
-        cy.task('log', 'Lien de recherche trouvé');
+        console.log('Lien de recherche trouvé');
       });
   });
 });
