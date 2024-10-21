@@ -32,34 +32,19 @@ pipeline {
         stage('Run Cypress Tests') {
             steps {
                 script {
+                    // Cypress testlerini çalıştırırken çıktıların konsolda görünmesini sağla
                     def testResult = sh(script: '''
                         npx cypress verify || exit 0
                         npx cypress run \
                         --browser electron \
                         --headless \
-                        --reporter mochawesome \
-                        --reporter-options "reportDir=cypress/results,overwrite=false,html=true,json=true,reportFilename=report" \
-                        --config defaultCommandTimeout=60000
+                        --reporter mocha-junit-reporter \
+                        --reporter-options "mochaFile=cypress/results/junit-results.xml" \
+                        --config defaultCommandTimeout=60000 \
+                        --quiet
                     ''', returnStdout: true)
                     
-                    echo "Cypress Test Sonuçları:"
                     echo testResult
-                    
-                    // Mochawesome raporunu oku ve ekrana yazdır
-                    def reportContent = readFile('cypress/results/report.json')
-                    def report = readJSON text: reportContent
-                    
-                    echo "Test Özeti:"
-                    echo "Toplam Test Sayısı: ${report.stats.tests}"
-                    echo "Başarılı Test Sayısı: ${report.stats.passes}"
-                    echo "Başarısız Test Sayısı: ${report.stats.failures}"
-                    
-                    report.results[0].suites[0].tests.each { test ->
-                        echo "Test: ${test.title}"
-                        echo "Durum: ${test.pass ? 'Başarılı' : 'Başarısız'}"
-                        echo "Süre: ${test.duration} ms"
-                        echo "---"
-                    }
                 }
             }
         }
@@ -67,14 +52,7 @@ pipeline {
     
     post {
         always {
-            publishHTML(target: [
-                allowMissing: false,
-                alwaysLinkToLastBuild: false,
-                keepAll: true,
-                reportDir: 'cypress/results',
-                reportFiles: 'report.html',
-                reportName: 'Cypress Test Raporu'
-            ])
+            junit allowEmptyResults: true, testResults: 'cypress/results/*.xml'
         }
         cleanup {
             cleanWs()
