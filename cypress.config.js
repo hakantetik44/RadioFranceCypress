@@ -2,24 +2,21 @@ const { defineConfig } = require('cypress')
 
 module.exports = defineConfig({
   e2e: {
-    video: true,  // Video kaydını etkinleştir
-    videoCompression: 32, 
-    videosFolder: 'cypress/videos', // Video dosyalarının kaydedileceği klasör
+    video: true,
+    videoCompression: 32,
+    videosFolder: 'cypress/videos',
     screenshotOnRunFailure: false,
     setupNodeEvents(on, config) {
-      // Node olay dinleyicilerini burada uygulayın
-      // Örneğin, özel raporlama veya loglama işlevleri ekleyebilirsiniz.
+      // Raporlayıcıyı ayarlayın
+      on('after:run', (results) => {
+        const mochaJunitReporter = require('mocha-junit-reporter');
+        mochaJunitReporter(results);
+      });
     },
   },
-  reporter: 'mocha',
+  reporter: 'mocha-junit-reporter',
   reporterOptions: {
-    reportDir: 'cypress/results',
-    overwrite: false,
-    html: false,
-    json: true,
-    toConsole: true, // Konsola rapor yazdır
+    mochaFile: 'cypress/results/junit-results.xml', // Sonuç dosyasının yolu
+    toConsole: true, // Konsola da yazdır
   },
-  // Cypress'ın hata mesajlarını daha görünür hale getirmek için bu seçenekleri ekleyin
-  defaultCommandTimeout: 60000, // Komut zaman aşımını artırma
-  pageLoadTimeout: 60000, // Sayfa yükleme zaman aşımını artırma
 })
