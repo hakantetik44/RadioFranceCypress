@@ -31,27 +31,23 @@ pipeline {
 
         stage('Run Cypress Tests') {
             steps {
-                script {
-                    // Cypress testlerini çalıştır
-                    sh '''
-                        npx cypress verify || exit 0
-                        npx cypress run \
-                        --browser electron \
-                        --headless \
-                        --reporter mocha-junit-reporter \
-                        --reporter-options "mochaFile=cypress/results/junit-results.xml" \
-                        --config defaultCommandTimeout=60000 \
-                        --quiet
-                    '''
-                }
+                sh '''
+                    npx cypress verify || exit 0
+                    npx cypress run \
+                    --browser electron \
+                    --headless \
+                    --reporter mocha-junit-reporter \
+                    --reporter-options "mochaFile=cypress/results/junit-results.xml" \
+                    --config defaultCommandTimeout=60000 \
+                    --quiet
+                '''
             }
         }
     }
     
     post {
         always {
-            // JUnit sonuçlarını topla
-            junit allowEmptyResults: true, testResults: 'cypress/results/junit-results.xml'
+            junit allowEmptyResults: true, testResults: 'cypress/results/*.xml'
         }
         cleanup {
             cleanWs()
