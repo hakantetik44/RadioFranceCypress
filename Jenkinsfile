@@ -58,14 +58,12 @@ pipeline {
     post {
         always {
             archiveArtifacts artifacts: 'cypress/videos/**/*.mp4,cypress/screenshots/**/*.png,cypress/results/**/*,cypress_output.log', allowEmptyArchive: true
-            publishHTML(target: [
-                allowMissing: false,
-                alwaysLinkToLastBuild: false,
-                keepAll: true,
-                reportDir: 'cypress/results',
-                reportFiles: 'mochawesome.html',
-                reportName: 'Cypress Test Report'
-            ])
+        }
+        success {
+            echo "Tests passed successfully!"
+        }
+        failure {
+            echo "Tests failed. Check the logs for more details."
         }
         cleanup {
             cleanWs()
