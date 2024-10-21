@@ -2,23 +2,22 @@ const { defineConfig } = require('cypress')
 
 module.exports = defineConfig({
   e2e: {
-    video: true,  // Video kaydını etkinleştir
-    videoCompression: 32, 
-    videosFolder: 'cypress/videos', 
-    screenshotOnRunFailure: false,
+    video: true,
+    videoCompression: 32,
+    videosFolder: 'cypress/videos',
+    screenshotOnRunFailure: true,
     setupNodeEvents(on, config) {
-      
+      // implement node event listeners here
     },
   },
-  reporter: 'mocha',
+  reporter: 'mochawesome',
   reporterOptions: {
     reportDir: 'cypress/results',
     overwrite: false,
-    html: false,
+    html: true,
     json: true,
-    toConsole: true, // Konsola rapor yazdır
+    reportFilename: 'report',
   },
-  
-  defaultCommandTimeout: 60000, 
-  pageLoadTimeout: 60000, 
+  defaultCommandTimeout: 60000,
+  pageLoadTimeout: 60000,
 })
