@@ -1,18 +1,13 @@
-const { defineConfig } = require('cypress');
+const { defineConfig } = require('cypress')
 
 module.exports = defineConfig({
+  reporter: 'junit',
+  reporterOptions: {
+    mochaFile: 'cypress/results/results-[hash].xml',
+  },
   e2e: {
     setupNodeEvents(on, config) {
-      on('task', {
-        log(message) {
-          console.log(message)
-          return null
-        },
-      })
+      // implement node event listeners here
     },
   },
-  reporter: 'spec',
-  reporterOptions: {
-    toConsole: true,
-  },
-});
+})
