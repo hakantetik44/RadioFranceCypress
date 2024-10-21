@@ -1,7 +1,7 @@
 pipeline {
     agent any
     tools {
-        nodejs 'NodeJS' // Name you gave in the Global Tool Configuration
+        nodejs 'Node.js 22.9' // Global Tool Configuration'daki isimle eşleşmeli
     }
     stages {
         stage('Checkout') {
