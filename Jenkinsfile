@@ -31,23 +31,41 @@ pipeline {
 
         stage('Run Cypress Tests') {
             steps {
-                sh '''
-                    npx cypress verify || exit 0
-                    npx cypress run \
-                    --browser electron \
-                    --headless \
-                    --reporter mocha-junit-reporter \
-                    --reporter-options "mochaFile=cypress/results/junit-results.xml" \
-                    --config defaultCommandTimeout=60000 \
-                    --quiet
-                '''
+                script {
+                    try {
+                        sh '''
+                            npx cypress verify
+                            CYPRESS_CONSOLE_OUTPUT=true npx cypress run \
+                            --browser electron \
+                            --headless \
+                            --reporter mochawesome \
+                            --reporter-options reportDir=cypress/results,overwrite=false,html=true,json=true \
+                            --config defaultCommandTimeout=60000 \
+                            | tee cypress_output.log
+                        '''
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        error("Cypress tests failed: ${e.message}")
+                    } finally {
+                        echo "Cypress Test Çıktıları:"
+                        sh 'cat cypress_output.log'
+                    }
+                }
             }
         }
     }
     
     post {
         always {
-            junit allowEmptyResults: true, testResults: 'cypress/results/*.xml'
+            archiveArtifacts artifacts: 'cypress/videos/**/*.mp4,cypress/screenshots/**/*.png,cypress/results/**/*,cypress_output.log', allowEmptyArchive: true
+            publishHTML(target: [
+                allowMissing: false,
+                alwaysLinkToLastBuild: false,
+                keepAll: true,
+                reportDir: 'cypress/results',
+                reportFiles: 'mochawesome.html',
+                reportName: 'Cypress Test Report'
+            ])
         }
         cleanup {
             cleanWs()
