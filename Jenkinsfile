@@ -10,23 +10,21 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                // Node.js ve npm'in zaten kurulu olduğunu varsayıyoruz
-                // Eğer kurulu değilse, sunucuya manuel olarak kurulum yapmanız gerekebilir
-                sh 'npm install'
+                // Node.js ve npm'in kurulu olduğunu varsayıyoruz
+                sh 'npm install || { echo "npm not found, exiting."; exit 1; }'
             }
         }
 
         stage('Run Cypress Tests') {
             steps {
-                // Cypress testini çalıştırma
-                sh 'npx cypress run --spec "cypress/e2e/RadioFrance.cy.js"'
+                sh 'npx cypress run --spec "cypress/e2e/RadioFrance.cy.js" || { echo "Cypress tests failed."; exit 1; }'
             }
         }
     }
 
     post {
         always {
-            junit 'cypress/results/*.xml' // Test sonuçlarını kaydetme
+            junit 'cypress/results/*.xml'
         }
     }
 }
