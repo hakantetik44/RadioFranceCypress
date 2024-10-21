@@ -31,16 +31,21 @@ pipeline {
 
         stage('Run Cypress Tests') {
             steps {
-                sh '''
-                    npx cypress verify || exit 0
-                    npx cypress run \
-                    --browser electron \
-                    --headless \
-                    --reporter mocha-junit-reporter \
-                    --reporter-options "mochaFile=cypress/results/junit-results.xml" \
-                    --config defaultCommandTimeout=60000 \
-                    --quiet
-                '''
+                script {
+                    // Cypress testlerini çalıştırırken çıktıların konsolda görünmesini sağla
+                    def testResult = sh(script: '''
+                        npx cypress verify || exit 0
+                        npx cypress run \
+                        --browser electron \
+                        --headless \
+                        --reporter mocha-junit-reporter \
+                        --reporter-options "mochaFile=cypress/results/junit-results.xml" \
+                        --config defaultCommandTimeout=60000 \
+                        --quiet
+                    ''', returnStdout: true)
+                    
+                    echo testResult
+                }
             }
         }
     }
