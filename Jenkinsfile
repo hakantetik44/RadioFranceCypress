@@ -10,14 +10,13 @@ pipeline {
 
         stage('Install Dependencies') {
             steps {
-                // Node.js ve npm'in kurulu olduğunu varsayıyoruz
                 sh 'npm install || { echo "npm not found, exiting."; exit 1; }'
             }
         }
 
         stage('Run Cypress Tests') {
             steps {
-                sh 'npx cypress run --spec "cypress/e2e/RadioFrance.cy.js" || { echo "Cypress tests failed."; exit 1; }'
+                sh 'npx cypress run || { echo "Cypress tests failed."; exit 1; }'
             }
         }
     }
