@@ -45,8 +45,10 @@ pipeline {
                         currentBuild.result = 'FAILURE'
                         error("Cypress tests failed: ${e.message}")
                     } finally {
-                        echo "Cypress Test Çıktıları:"
-                        sh 'cat cypress_output.log'
+                        echo "Cypress Test Sonuçları:"
+                        sh '''
+                            cat cypress_output.log | sed -e 's/\\x1b\\[[0-9;]*m//g' | grep -v "^[[:space:]]*$" | grep -v "^[=─]*$"
+                        '''
                     }
                 }
             }
@@ -58,10 +60,10 @@ pipeline {
             archiveArtifacts artifacts: 'cypress/videos/**/*.mp4,cypress/screenshots/**/*.png,cypress_output.log', allowEmptyArchive: true
         }
         success {
-            echo "Tests passed successfully!"
+            echo "Tüm testler başarıyla geçti!"
         }
         failure {
-            echo "Tests failed. Check the logs for more details."
+            echo "Testler başarısız oldu. Lütfen logları kontrol edin."
         }
         cleanup {
             cleanWs()
