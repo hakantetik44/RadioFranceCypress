@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites name="Mocha Tests" time="13.010" tests="3" failures="0">
+  <testsuite name="Root Suite" timestamp="2024-10-21T19:26:35" tests="0" file="cypress/e2e/RadioFrance.cy.js" time="0.000" failures="0">
+  </testsuite>
+  <testsuite name="Fonctionnalités de base de France Culture" timestamp="2024-10-21T19:26:35" tests="3" time="12.982" failures="0">
+    <testcase name="Fonctionnalités de base de France Culture charge la page d&apos;accueil et vérifie le titre" time="2.475" classname="charge la page d&apos;accueil et vérifie le titre">
+    </testcase>
+    <testcase name="Fonctionnalités de base de France Culture vérifie le menu principal" time="2.360" classname="vérifie le menu principal">
+    </testcase>
+    <testcase name="Fonctionnalités de base de France Culture vérifie le lien de recherche" time="4.698" classname="vérifie le lien de recherche">
+    </testcase>
+  </testsuite>
+</testsuites>

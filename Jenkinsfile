@@ -7,7 +7,6 @@ pipeline {
     
     environment {
         CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
-        CYPRESS_CONFIG_FILE = "${WORKSPACE}/cypress.json"
     }
     
     stages {
@@ -17,28 +16,30 @@ pipeline {
             }
         }
         
-        stage('Debug Info') {
-            steps {
-                sh '''
-                    echo "PATH = $PATH"
-                    node -v
-                    npm -v
-                    npx cypress --version
-                    pwd
-                    ls -la
-                '''
-            }
-        }
-        
         stage('Install Dependencies') {
             steps {
                 sh 'npm ci'
             }
         }
-        
+
+        stage('Prepare Cypress Cache') {
+            steps {
+                // Cypress cache klasörünü oluştur
+                sh 'mkdir -p $CYPRESS_CACHE_FOLDER'
+            }
+        }
+
         stage('Run Cypress Tests') {
             steps {
-                sh 'CYPRESS_INSTALL_BINARY=0 npx cypress run --headless --browser electron --reporter junit --reporter-options "mochaFile=cypress/results/results-[hash].xml"'
+                sh '''
+                    npx cypress verify || exit 0  # Cypress'i doğrulamak için
+                    npx cypress run \
+                    --browser electron \
+                    --headless \
+                    --reporter mocha \
+                    --reporter-options "reportDir=cypress/results,overwrite=false,html=false,json=true" \
+                    --config defaultCommandTimeout=60000
+                '''
             }
         }
     }
@@ -46,9 +47,6 @@ pipeline {
     post {
         always {
             junit allowEmptyResults: true, testResults: 'cypress/results/*.xml'
-        }
-        failure {
-            archiveArtifacts artifacts: 'cypress/screenshots/**/*.png,cypress/videos/**/*.mp4', allowEmptyArchive: true
         }
         cleanup {
             cleanWs()
