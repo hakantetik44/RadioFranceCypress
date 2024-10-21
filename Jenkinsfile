@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'Node14'  // Assurez-vous que 'Node14' est configuré dans les outils Jenkins
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -10,10 +14,8 @@ pipeline {
         
         stage('Setup Node.js') {
             steps {
-                sh 'which node || echo "Node.js not found"'
-                sh 'which npm || echo "npm not found"'
-                sh 'node -v || echo "Node.js not available"'
-                sh 'npm -v || echo "npm not available"'
+                sh 'node -v'
+                sh 'npm -v'
             }
         }
         
