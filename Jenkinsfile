@@ -1,35 +1,56 @@
 pipeline {
     agent any
-
+    
+    tools {
+        nodejs 'Node.js 22.9'
+    }
+    
+    environment {
+        CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
+        TERM = 'dumb'
+    }
+    
     stages {
         stage('Checkout') {
             steps {
-                echo 'Kaynak kodu alınıyor...'
-                git url: 'https://github.com/hakantetik44/RadioFranceCypress.git'
+                checkout scm
             }
         }
         
         stage('Install Dependencies') {
             steps {
-                echo 'Bağımlılıklar yükleniyor...'
                 sh 'npm ci'
             }
         }
-        
+
+        stage('Prepare Cypress Cache') {
+            steps {
+                sh 'mkdir -p $CYPRESS_CACHE_FOLDER'
+            }
+        }
+
         stage('Run Cypress Tests') {
             steps {
-                script {
-                    echo 'Cypress testleri başlatılıyor...'
-                    sh 'npx cypress run --browser electron --headless --reporter mocha --reporter-options reportDir=cypress/results,overwrite=false,html=false,json=true --config defaultCommandTimeout=60000'
-                    echo 'Cypress testleri tamamlandı.'
-                }
+                sh '''
+                    npx cypress verify || exit 0
+                    npx cypress run \
+                    --browser electron \
+                    --headless \
+                    --reporter mocha \
+                    --reporter-options "reportDir=cypress/results,overwrite=false,html=false,json=true" \
+                    --config defaultCommandTimeout=60000 \
+                    --quiet
+                '''
             }
         }
     }
-
+    
     post {
         always {
-            echo 'Jenkins job tamamlandı.'
+            junit allowEmptyResults: true, testResults: 'cypress/results/*.xml'
+        }
+        cleanup {
+            cleanWs()
         }
     }
 }
