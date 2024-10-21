@@ -7,16 +7,20 @@ module.exports = defineConfig({
     videosFolder: 'cypress/videos',
     screenshotOnRunFailure: true,
     setupNodeEvents(on, config) {
-      // implement node event listeners here
+      on('task', {
+        log(message) {
+          console.log(message)
+          return null
+        },
+      })
     },
   },
-  reporter: 'mochawesome',
+  reporter: 'mocha',
   reporterOptions: {
     reportDir: 'cypress/results',
     overwrite: false,
-    html: true,
+    html: false,
     json: true,
-    reportFilename: 'report',
   },
   defaultCommandTimeout: 60000,
   pageLoadTimeout: 60000,
