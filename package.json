@@ -165,14 +165,13 @@
     "yauzl": "^2.10.0"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "cypress run"
   },
   "author": "",
   "license": "ISC",
   "description": "",
   "devDependencies": {
     "cypress": "^13.15.0",
-    "cypress-terminal-report": "^7.0.4",
-    "mocha-junit-reporter": "^2.2.1"
+    "cypress-terminal-report": "^7.0.4"
   }
 }
