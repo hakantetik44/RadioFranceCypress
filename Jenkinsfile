@@ -8,19 +8,10 @@ pipeline {
             }
         }
 
-        stage('Install Node.js') {
-            steps {
-                // Node.js kurulumu için gerekli komut
-                sh '''
-                curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
-                sudo apt-get install -y nodejs
-                '''
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
-                // NPM ile gerekli bağımlılıkları yükleme
+                // Node.js ve npm'in zaten kurulu olduğunu varsayıyoruz
+                // Eğer kurulu değilse, sunucuya manuel olarak kurulum yapmanız gerekebilir
                 sh 'npm install'
             }
         }
