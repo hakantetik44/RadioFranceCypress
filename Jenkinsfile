@@ -30,53 +30,48 @@ pipeline {
 
         stage('Run Cypress Tests') {
             steps {
-                script {
-                    try {
-                        sh '''
-                            npx cypress run \
-                            --browser electron \
-                            --headless \
-                            --config defaultCommandTimeout=60000 \
-                            | tee cypress_output.log
-                        '''
-                    } catch (Exception e) {
-                        currentBuild.result = 'FAILURE'
-                        error("Cypress tests failed: ${e.message}")
-                    } finally {
-                        echo "Cypress Test Sonuçları:"
-                        sh '''
-                            cat cypress_output.log | \
-                            sed -e 's/\\x1b\\[[0-9;]*m//g' | \
-                            sed -e '/^$/d' | \
-                            sed -e '/^Opening Cypress/d' | \
-                            sed -e '/^DevTools listening/d' | \
-                            sed -e '/^Opening.*failed/d' | \
-                            sed -e '/^tput:/d' | \
-                            sed -e '/^===/d' | \
-                            sed -e '/^  (Run Starting)/d' | \
-                            sed -e '/^  │/d' | \
-                            sed -e '/^  └/d' | \
-                            sed -e 's/^  Running:/Test Dosyası:/' | \
-                            grep -E "^(Test Dosyası:|\\s*✓|\\s*✖|describe|it|\\d+\\))" | \
-                            sed -e 's/^[[:space:]]*//' | \
-                            sed -e 's/^✓/[BAŞARILI]/' | \
-                            sed -e 's/^✖/[BAŞARISIZ]/' | \
-                            sed -e 's/^describe/Test Grubu:/' | \
-                            sed -e 's/^it/Test:/' | \
-                            sed -e 's/^[0-9])/Test /'
-                        '''
-                        
-                        echo "Test Özeti:"
-                        sh '''
-                            cat cypress_output.log | \
-                            sed -e 's/\\x1b\\[[0-9;]*m//g' | \
-                            grep -E "^\\s*(✓|✖|passing|failing|pending|duration)" | \
-                            sed -e 's/^[[:space:]]*//' | \
-                            sed -e 's/passing/Geçen Test Sayısı:/' | \
-                            sed -e 's/failing/Başarısız Test Sayısı:/' | \
-                            sed -e 's/pending/Bekleyen Test Sayısı:/' | \
-                            sed -e 's/duration/Toplam Süre:/'
-                        '''
+                wrap([$class: 'AnsiColorBuildWrapper', 'colorMapName': 'xterm']) {
+                    script {
+                        try {
+                            def testOutput = sh(
+                                script: '''
+                                    npx cypress run \
+                                    --browser electron \
+                                    --headless \
+                                    --config defaultCommandTimeout=60000
+                                ''',
+                                returnStdout: true
+                            ).trim()
+
+                            echo "Test Çıktıları:"
+                            def cleanOutput = testOutput.replaceAll(/\x1B\[[0-9;]*[mK]/, '')  // ANSI kodlarını kaldır
+                                                      .readLines()
+                                                      .findAll { line ->
+                                                          line.contains('✓') ||
+                                                          line.contains('✖') ||
+                                                          line.contains('Running:') ||
+                                                          line.contains('passing') ||
+                                                          line.contains('failing') ||
+                                                          line.contains('pending') ||
+                                                          line.contains('duration')
+                                                      }
+                                                      .collect { line ->
+                                                          line = line.trim()
+                                                          line = line.replaceAll(/^Running:/, 'Test Dosyası:')
+                                                          line = line.replaceAll(/^✓/, '[BAŞARILI]')
+                                                          line = line.replaceAll(/^✖/, '[BAŞARISIZ]')
+                                                          line = line.replaceAll(/passing/, 'Geçen Test Sayısı:')
+                                                          line = line.replaceAll(/failing/, 'Başarısız Test Sayısı:')
+                                                          line = line.replaceAll(/pending/, 'Bekleyen Test Sayısı:')
+                                                          line = line.replaceAll(/duration/, 'Toplam Süre:')
+                                                          return line
+                                                      }
+                                                      .join('\n')
+
+                            echo cleanOutput
+                        } catch (Exception e) {
+                            error("Cypress testleri başarısız oldu: ${e.message}")
+                        }
                     }
                 }
             }
@@ -84,17 +79,46 @@ pipeline {
     }
     
     post {
-        always {
-            archiveArtifacts artifacts: 'cypress/videos/**/*.mp4,cypress/screenshots/**/*.png,cypress_output.log', allowEmptyArchive: true
-        }
         success {
             echo "Tüm testler başarıyla tamamlandı!"
+            
+            script {
+                // Test sonuçlarını kaydet
+                sh 'mkdir -p cypress/results'
+                sh 'touch cypress/results/test-summary.txt'
+                sh 'echo "Test Başarılı - $(date)" > cypress/results/test-summary.txt'
+            }
+            
+            // Test sonuçlarını arşivle
+            archiveArtifacts artifacts: '''
+                cypress/videos/**/*.mp4,
+                cypress/screenshots/**/*.png,
+                cypress/results/test-summary.txt
+            ''', allowEmptyArchive: true
         }
         failure {
-            echo "Testlerde hatalar var. Lütfen log dosyalarını kontrol edin."
+            echo "Testlerde hatalar var! Detaylı bilgi için logları kontrol edin."
+            
+            script {
+                // Hata detaylarını kaydet
+                sh 'mkdir -p cypress/results'
+                sh 'touch cypress/results/test-failures.txt'
+                sh 'echo "Test Başarısız - $(date)" > cypress/results/test-failures.txt'
+            }
+            
+            // Hata raporlarını arşivle
+            archiveArtifacts artifacts: '''
+                cypress/videos/**/*.mp4,
+                cypress/screenshots/**/*.png,
+                cypress/results/test-failures.txt
+            ''', allowEmptyArchive: true
         }
         cleanup {
-            cleanWs()
+            cleanWs(
+                cleanWhenSuccess: true,
+                cleanWhenFailure: true,
+                cleanWhenAborted: true
+            )
         }
     }
 }
