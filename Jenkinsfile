@@ -11,6 +11,7 @@ pipeline {
         TIMESTAMP = new Date().format('yyyy-MM-dd_HH-mm-ss')
         GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
         GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
+        ALLURE_RESULTS_DIR = 'allure-results'
     }
 
     stages {
@@ -26,7 +27,8 @@ pipeline {
                 sh """
                     mkdir -p $CYPRESS_CACHE_FOLDER
                     mkdir -p ${REPORT_DIR}/{json,html,pdf,junit}
-                    mkdir -p cypress/videos cypress/screenshots allure-results
+                    mkdir -p cypress/videos cypress/screenshots
+                    mkdir -p ${ALLURE_RESULTS_DIR}
                 """
             }
         }
@@ -39,7 +41,7 @@ pipeline {
 
                 sh '''
                     npm ci
-                    npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter allure-commandline
+                    npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf @shelex/cypress-allure-plugin allure-commandline
                 '''
             }
         }
@@ -50,17 +52,17 @@ pipeline {
                     try {
                         echo "🧪 Running Cypress tests..."
 
-                        // Cypress testlerini çalıştır ve logları temizle
+                        // Run Cypress tests with multiple reporters
                         sh '''
                             npx cypress run \
                             --browser electron \
                             --headless \
-                            --reporter mochawesome \
+                            --reporter cypress-multi-reporters \
                             --reporter-options configFile=reporter-config.json \
                             2>&1 | sed -r "s/\\x1b\\[[0-9;]*m//g" | tee cypress-output.txt
                         '''
 
-                        // PDF raporu oluşturma
+                        // Generate PDF Report
                         writeFile file: 'createReport.js', text: """
                             const fs = require('fs');
                             const { jsPDF } = require('jspdf');
@@ -70,14 +72,14 @@ pipeline {
                                 const testOutput = fs.readFileSync('cypress-output.txt', 'utf8');
                                 const doc = new jsPDF();
 
-                                // Başlık sayfası
+                                // Title page
                                 doc.setFontSize(28);
                                 doc.setTextColor(44, 62, 80);
                                 doc.text('Test Report', 20, 30);
                                 doc.setFontSize(20);
                                 doc.text('France Culture Test Suite', 20, 45);
 
-                                // Bilgi kutusu
+                                // Info box
                                 doc.setDrawColor(52, 152, 219);
                                 doc.setFillColor(240, 248, 255);
                                 doc.roundedRect(20, 60, 170, 50, 3, 3, 'FD');
@@ -90,12 +92,12 @@ pipeline {
                                 ];
                                 doc.text(buildInfo, 25, 70);
 
-                                // Test Özeti
+                                // Test Summary
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
                                 doc.text('Test Summary', 20, 130);
 
-                                // Stat box fonksiyonu
+                                // Stat box function
                                 function drawStatBox(text, value, x, y, color) {
                                     doc.setDrawColor(color[0], color[1], color[2]);
                                     doc.setFillColor(255, 255, 255);
@@ -112,7 +114,7 @@ pipeline {
                                 drawStatBox('Failed', report.stats.failures, 20, 180, [231, 76, 60]);
                                 drawStatBox('Duration', Math.round(report.stats.duration/1000) + 's', 110, 180, [52, 152, 219]);
 
-                                // Test Detayları
+                                // Test Details
                                 doc.addPage();
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
@@ -151,7 +153,6 @@ pipeline {
                                     yPos += 10;
                                 });
 
-                                // PDF'i kaydet
                                 doc.save('${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf');
                             } catch (err) {
                                 console.error(err);
@@ -159,12 +160,10 @@ pipeline {
                             }
                         """
 
-                        // Raporu çalıştır
-                        sh 'node createReport.js'
-
-                        // Allure raporunu oluştur
+                        // Generate reports
                         sh '''
-                            npx allure generate allure-results --clean -o allure-report
+                            node createReport.js
+                            npx allure generate ${ALLURE_RESULTS_DIR} --clean -o allure-report
                         '''
                         
                     } catch (Exception e) {
@@ -186,12 +185,24 @@ pipeline {
 
     post {
         always {
+            // Archive artifacts
             archiveArtifacts artifacts: """
-                cypress/reports/pdf/*,
-                allure-report/**,
+                ${REPORT_DIR}/pdf/*,
+                allure-report/**/*,
                 cypress/videos/**/*,
                 cypress/screenshots/**/*
             """, allowEmptyArchive: true
+
+            // Publish Allure Report
+            publishHTML([
+                allowMissing: false,
+                alwaysLinkToLastBuild: true,
+                keepAll: true,
+                reportDir: 'allure-report',
+                reportFiles: 'index.html',
+                reportName: 'Allure Report',
+                reportTitles: 'France Culture Test Results'
+            ])
         }
         success {
             echo """
@@ -202,14 +213,20 @@ pipeline {
                 - Allure Report: allure-report/index.html
                 - Videos: cypress/videos
             """
+
+            // Slack notification for success (if you want to add)
+            // slackSend channel: '#testing', color: 'good', message: "✅ Test Pipeline SUCCESS\nPDF Report: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf\nAllure Report: allure-report/index.html"
         }
         failure {
             echo """
                 ❌ Test Summary:
                 - Status: FAILED
                 - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Check the report for more details
+                - Check the reports for more details
             """
+
+            // Slack notification for failure (if you want to add)
+            // slackSend channel: '#testing', color: 'danger', message: "❌ Test Pipeline FAILED\nCheck the reports for details"
         }
         cleanup {
             cleanWs()
