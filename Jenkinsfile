@@ -1,10 +1,10 @@
 pipeline {
     agent any
-    
+
     tools {
         nodejs 'Node.js 22.9'
     }
-    
+
     environment {
         CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
         REPORT_DIR = "cypress/reports"
@@ -12,7 +12,12 @@ pipeline {
         GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
         GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
     }
-    
+
+    options {
+        // Disable ANSI color codes in console output
+        ansiColor('xterm')  // This can clean up the console log formatting
+    }
+
     stages {
         stage('Préparation') {
             steps {
@@ -20,9 +25,9 @@ pipeline {
                     echo "🚀 Démarrage du pipeline de test"
                     echo "⚙️ Configuration de l'environnement..."
                 }
-                
                 checkout scm
-                
+
+                // Preparing directories
                 sh """
                     mkdir -p $CYPRESS_CACHE_FOLDER
                     mkdir -p ${REPORT_DIR}/{json,html,pdf,junit}
@@ -30,13 +35,13 @@ pipeline {
                 """
             }
         }
-        
+
         stage('Installation') {
             steps {
                 script {
                     echo "📦 Installation des dépendances..."
                 }
-                
+
                 sh '''
                     npm ci
                     npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
@@ -49,18 +54,18 @@ pipeline {
                 script {
                     try {
                         echo "🧪 Exécution des tests Cypress..."
-                        
-                        // Exécute les tests
+
+                        // Running Cypress tests without verbose logging
                         sh """
                             npx cypress run \
                             --browser electron \
                             --headless \
                             --reporter mochawesome \
                             --reporter-options configFile=reporter-config.json \
-                            2>&1 | tee cypress-output.txt
+                            --no-color 2>&1 | tee cypress-output.txt
                         """
 
-                        // Créer le script de rapport PDF
+                        // Create PDF report script
                         writeFile file: 'createReport.js', text: """
                             const fs = require('fs');
                             const { jsPDF } = require('jspdf');
@@ -70,14 +75,14 @@ pipeline {
                                 const testOutput = fs.readFileSync('cypress-output.txt', 'utf8');
                                 const doc = new jsPDF();
 
-                                // Page de titre
+                                // Title page
                                 doc.setFontSize(28);
                                 doc.setTextColor(44, 62, 80);
                                 doc.text('Rapport de Tests', 20, 30);
                                 doc.setFontSize(24);
                                 doc.text('France Culture', 20, 45);
 
-                                // Boîte d'information
+                                // Build information box
                                 doc.setDrawColor(52, 152, 219);
                                 doc.setFillColor(240, 248, 255);
                                 doc.roundedRect(20, 60, 170, 50, 3, 3, 'FD');
@@ -91,12 +96,12 @@ pipeline {
                                 ];
                                 doc.text(buildInfo, 25, 70);
 
-                                // Résumé des tests
+                                // Test summary
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
                                 doc.text('Résumé des Tests', 20, 130);
 
-                                // Boîtes d'état
+                                // Stat boxes
                                 function drawStatBox(text, value, x, y, color) {
                                     doc.setDrawColor(color[0], color[1], color[2]);
                                     doc.setFillColor(255, 255, 255);
@@ -113,7 +118,7 @@ pipeline {
                                 drawStatBox('Échoués', report.stats.failures, 20, 180, [231, 76, 60]);
                                 drawStatBox('Durée', Math.round(report.stats.duration/1000) + 's', 110, 180, [52, 152, 219]);
 
-                                // Détails des tests
+                                // Test details page
                                 doc.addPage();
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
@@ -152,7 +157,7 @@ pipeline {
                                     yPos += 10;
                                 });
 
-                                // Logs
+                                // Logs page
                                 doc.addPage();
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
@@ -173,7 +178,7 @@ pipeline {
                                     yPos += 10;
                                 });
 
-                                // Sauvegarder le PDF
+                                // Save the PDF
                                 doc.save('${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf');
                             } catch (err) {
                                 console.error(err);
@@ -181,7 +186,7 @@ pipeline {
                             }
                         """
 
-                        // Créer le rapport PDF
+                        // Create the PDF report
                         sh 'node createReport.js'
                         
                     } catch (Exception e) {
@@ -200,7 +205,7 @@ pipeline {
             }
         }
     }
-    
+
     post {
         always {
             archiveArtifacts artifacts: """
