@@ -11,7 +11,6 @@ pipeline {
         TIMESTAMP = new Date().format('yyyy-MM-dd_HH-mm-ss')
         GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
         GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
-        ALLURE_RESULTS_DIR = 'allure-results'
     }
 
     stages {
@@ -28,7 +27,6 @@ pipeline {
                     mkdir -p $CYPRESS_CACHE_FOLDER
                     mkdir -p ${REPORT_DIR}/{json,html,pdf,junit}
                     mkdir -p cypress/videos cypress/screenshots
-                    mkdir -p ${ALLURE_RESULTS_DIR}
                 """
             }
         }
@@ -41,7 +39,7 @@ pipeline {
 
                 sh '''
                     npm ci
-                    npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf @shelex/cypress-allure-plugin allure-commandline
+                    npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
                 '''
             }
         }
@@ -52,23 +50,29 @@ pipeline {
                     try {
                         echo "🧪 Running Cypress tests..."
 
-                        // Run Cypress tests with multiple reporters
+                        // Run Cypress tests with mochawesome reporter
                         sh '''
                             npx cypress run \
                             --browser electron \
                             --headless \
-                            --reporter cypress-multi-reporters \
-                            --reporter-options configFile=reporter-config.json \
+                            --reporter mochawesome \
+                            --reporter-options reportDir=${REPORT_DIR}/json,overwrite=false,html=false,json=true \
                             2>&1 | sed -r "s/\\x1b\\[[0-9;]*m//g" | tee cypress-output.txt
                         '''
 
-                        // Generate PDF Report
+                        // Merge mochawesome reports
+                        sh """
+                            npx mochawesome-merge "${REPORT_DIR}/json/*.json" > "${REPORT_DIR}/mochawesome.json"
+                            npx marge "${REPORT_DIR}/mochawesome.json" --reportDir "${REPORT_DIR}/html" --inline
+                        """
+
+                        // Generate PDF report
                         writeFile file: 'createReport.js', text: """
                             const fs = require('fs');
                             const { jsPDF } = require('jspdf');
 
                             try {
-                                const report = JSON.parse(fs.readFileSync('mochawesome-report/mochawesome.json', 'utf8'));
+                                const report = JSON.parse(fs.readFileSync('${REPORT_DIR}/mochawesome.json', 'utf8'));
                                 const testOutput = fs.readFileSync('cypress-output.txt', 'utf8');
                                 const doc = new jsPDF();
 
@@ -97,7 +101,6 @@ pipeline {
                                 doc.setTextColor(41, 128, 185);
                                 doc.text('Test Summary', 20, 130);
 
-                                // Stat box function
                                 function drawStatBox(text, value, x, y, color) {
                                     doc.setDrawColor(color[0], color[1], color[2]);
                                     doc.setFillColor(255, 255, 255);
@@ -121,36 +124,40 @@ pipeline {
                                 doc.text('Test Details', 20, 20);
 
                                 let yPos = 40;
-                                report.results[0].suites[0].tests.forEach(test => {
-                                    if (yPos > 250) {
-                                        doc.addPage();
-                                        yPos = 20;
-                                    }
+                                report.results.forEach(suite => {
+                                    suite.suites.forEach(subSuite => {
+                                        subSuite.tests.forEach(test => {
+                                            if (yPos > 250) {
+                                                doc.addPage();
+                                                yPos = 20;
+                                            }
 
-                                    const isPassed = test.state === 'passed';
-                                    const icon = isPassed ? '✓' : '✗';
-                                    const color = isPassed ? [46, 204, 113] : [231, 76, 60];
-                                    
-                                    doc.setTextColor(...color);
-                                    doc.text(icon, 20, yPos);
+                                            const isPassed = test.state === 'passed';
+                                            const icon = isPassed ? '✓' : '✗';
+                                            const color = isPassed ? [46, 204, 113] : [231, 76, 60];
+                                            
+                                            doc.setTextColor(...color);
+                                            doc.text(icon, 20, yPos);
 
-                                    doc.setTextColor(0, 0, 0);
-                                    doc.setFontSize(12);
-                                    doc.text(test.title, 35, yPos);
-                                    doc.text((test.duration/1000).toFixed(2) + 's', 160, yPos);
+                                            doc.setTextColor(0, 0, 0);
+                                            doc.setFontSize(12);
+                                            doc.text(test.title, 35, yPos);
+                                            doc.text((test.duration/1000).toFixed(2) + 's', 160, yPos);
 
-                                    if (!isPassed && test.err) {
-                                        yPos += 7;
-                                        doc.setFontSize(10);
-                                        doc.setTextColor(231, 76, 60);
-                                        const errorLines = doc.splitTextToSize(test.err.message, 150);
-                                        errorLines.forEach(line => {
-                                            doc.text(line, 35, yPos);
-                                            yPos += 5;
+                                            if (!isPassed && test.err) {
+                                                yPos += 7;
+                                                doc.setFontSize(10);
+                                                doc.setTextColor(231, 76, 60);
+                                                const errorLines = doc.splitTextToSize(test.err.message, 150);
+                                                errorLines.forEach(line => {
+                                                    doc.text(line, 35, yPos);
+                                                    yPos += 5;
+                                                });
+                                            }
+
+                                            yPos += 10;
                                         });
-                                    }
-
-                                    yPos += 10;
+                                    });
                                 });
 
                                 doc.save('${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf');
@@ -161,10 +168,7 @@ pipeline {
                         """
 
                         // Generate reports
-                        sh '''
-                            node createReport.js
-                            npx allure generate ${ALLURE_RESULTS_DIR} --clean -o allure-report
-                        '''
+                        sh 'node createReport.js'
                         
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
@@ -185,24 +189,14 @@ pipeline {
 
     post {
         always {
-            // Archive artifacts
             archiveArtifacts artifacts: """
+                ${REPORT_DIR}/html/**/*,
                 ${REPORT_DIR}/pdf/*,
-                allure-report/**/*,
                 cypress/videos/**/*,
                 cypress/screenshots/**/*
             """, allowEmptyArchive: true
 
-            // Publish Allure Report
-            publishHTML([
-                allowMissing: false,
-                alwaysLinkToLastBuild: true,
-                keepAll: true,
-                reportDir: 'allure-report',
-                reportFiles: 'index.html',
-                reportName: 'Allure Report',
-                reportTitles: 'France Culture Test Results'
-            ])
+            junit "${REPORT_DIR}/junit/*.xml"
         }
         success {
             echo """
@@ -210,12 +204,9 @@ pipeline {
                 - Status: SUCCESS
                 - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 - PDF Report: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
-                - Allure Report: allure-report/index.html
+                - HTML Report: ${REPORT_DIR}/html/index.html
                 - Videos: cypress/videos
             """
-
-            // Slack notification for success (if you want to add)
-            // slackSend channel: '#testing', color: 'good', message: "✅ Test Pipeline SUCCESS\nPDF Report: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf\nAllure Report: allure-report/index.html"
         }
         failure {
             echo """
@@ -224,9 +215,6 @@ pipeline {
                 - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 - Check the reports for more details
             """
-
-            // Slack notification for failure (if you want to add)
-            // slackSend channel: '#testing', color: 'danger', message: "❌ Test Pipeline FAILED\nCheck the reports for details"
         }
         cleanup {
             cleanWs()
