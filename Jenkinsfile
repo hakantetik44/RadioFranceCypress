@@ -43,7 +43,7 @@ pipeline {
                     try {
                         echo "🚀 Démarrage des Tests Cypress..."
                         
-                        // Testleri çalıştır
+                        // Run tests
                         sh """
                             npx cypress run \
                             --browser electron \
@@ -53,100 +53,100 @@ pipeline {
                             2>&1 | tee cypress-output.txt
                         """
 
-                        // Test loglarını oku
-                        def testOutput = sh(
-                            script: "cat cypress-output.txt | grep 'CYPRESS_LOG:' || true",
-                            returnStdout: true
-                        ).trim()
+                        // Create PDF report
+                        writeFile file: 'createReport.js', text: """
+                            const fs = require('fs');
+                            const { jsPDF } = require('jspdf');
 
-                        echo "\n📋 Résultats des Tests:"
-                        testOutput.split('\n').each { line ->
-                            if (line) {
-                                echo "  ➜ ${line.replace('CYPRESS_LOG:', '').trim()}"
-                            }
-                        }
-
-                        // PDF rapor oluştur
-                        sh """
-                            echo 'const fs = require("fs");
-                            const { jsPDF } = require("jspdf");
-                            
                             try {
-                                const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/json/mochawesome.json", "utf8"));
-                                const testOutput = fs.readFileSync("cypress-output.txt", "utf8");
+                                const report = JSON.parse(fs.readFileSync('mochawesome-report/mochawesome.json', 'utf8'));
+                                const testOutput = fs.readFileSync('cypress-output.txt', 'utf8');
                                 const doc = new jsPDF();
                                 
-                                // Başlık
+                                // Title
                                 doc.setFontSize(20);
-                                doc.text("Rapport des Tests - France Culture", 20, 20);
+                                doc.text('Rapport de Tests Automatisés', 20, 20);
+                                doc.setFontSize(18);
+                                doc.text('France Culture', 20, 30);
                                 
-                                // Özet Bilgiler
+                                // Summary
                                 doc.setFontSize(14);
-                                doc.text("Résumé de lexécution", 20, 40);
-                                
-                                doc.setFontSize(12);
                                 doc.text([
-                                    "Date et heure: ${TIMESTAMP}",
-                                    "Total des tests: " + report.stats.tests,
-                                    "Tests réussis: " + report.stats.passes,
-                                    "Tests échoués: " + report.stats.failures,
-                                    "Durée totale: " + Math.round(report.stats.duration/1000) + " secondes"
-                                ], 30, 55);
-
-                                // Test Detayları
-                                doc.setFontSize(14);
-                                doc.text("Détails des tests", 20, 90);
+                                    'Date d\\'exécution: ${TIMESTAMP}',
+                                    'Nombre total de tests: ' + report.stats.tests,
+                                    'Tests réussis: ' + report.stats.passes,
+                                    'Tests échoués: ' + report.stats.failures,
+                                    'Durée totale: ' + Math.round(report.stats.duration/1000) + ' secondes'
+                                ], 20, 50);
                                 
-                                let yPos = 100;
-                                report.results[0].suites[0].tests.forEach(test => {
-                                    const status = test.state === "passed" ? "✓" : "✗";
-                                    doc.setFontSize(12);
-                                    doc.text(status + " " + test.title, 30, yPos);
-                                    doc.text("Durée: " + (test.duration/1000).toFixed(2) + "s", 30, yPos + 7);
-                                    
-                                    if (test.state !== "passed" && test.err) {
-                                        doc.setFontSize(10);
-                                        doc.text("Erreur: " + test.err.message, 35, yPos + 14);
-                                        yPos += 20;
-                                    } else {
-                                        yPos += 15;
-                                    }
+                                // Test Details
+                                let yPos = 90;
+                                doc.setFontSize(16);
+                                doc.text('Détail des Tests:', 20, yPos);
+                                yPos += 10;
 
+                                report.results[0].suites[0].tests.forEach(test => {
                                     if (yPos > 250) {
                                         doc.addPage();
                                         yPos = 20;
                                     }
-                                });
 
-                                // Log Kayıtları
-                                doc.addPage();
-                                doc.setFontSize(14);
-                                doc.text("Journal des actions", 20, 20);
+                                    doc.setFontSize(12);
+                                    const status = test.state === 'passed' ? '✓' : '✗';
+                                    const color = test.state === 'passed' ? [0, 128, 0] : [255, 0, 0];
+                                    
+                                    doc.setTextColor(...color);
+                                    doc.text(status, 20, yPos);
+                                    doc.setTextColor(0, 0, 0);
+                                    
+                                    const title = test.title;
+                                    const duration = (test.duration/1000).toFixed(2) + 's';
+                                    
+                                    doc.text(title, 30, yPos);
+                                    doc.text(duration, 150, yPos);
+                                    
+                                    if (test.state === 'failed' && test.err) {
+                                        yPos += 8;
+                                        doc.setFontSize(10);
+                                        doc.setTextColor(255, 0, 0);
+                                        doc.text('Erreur: ' + test.err.message, 35, yPos);
+                                        doc.setTextColor(0, 0, 0);
+                                    }
+                                    
+                                    yPos += 12;
+                                });
                                 
-                                let logPos = 35;
-                                const logs = testOutput.split("\\n")
-                                    .filter(line => line.includes("CYPRESS_LOG:"))
-                                    .map(line => line.replace("CYPRESS_LOG:", "").trim());
+                                // Logs Section
+                                doc.addPage();
+                                doc.setFontSize(16);
+                                doc.text('Journal d\\'Exécution:', 20, 20);
+                                
+                                let logPos = 40;
+                                const logs = testOutput.split('\\n')
+                                    .filter(line => line.includes('CYPRESS_LOG:'))
+                                    .map(line => line.replace('CYPRESS_LOG:', '').trim());
                                 
                                 logs.forEach(log => {
-                                    doc.setFontSize(10);
-                                    doc.text("• " + log, 25, logPos);
-                                    logPos += 7;
-                                    
                                     if (logPos > 250) {
                                         doc.addPage();
                                         logPos = 20;
                                     }
+                                    
+                                    doc.setFontSize(10);
+                                    doc.text('• ' + log, 25, logPos);
+                                    logPos += 10;
                                 });
                                 
-                                doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
-                                console.log("PDF report generated successfully");
+                                doc.save('${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf');
+                                console.log('PDF report generated successfully');
                                 
                             } catch (error) {
-                                console.error("Error generating PDF:", error);
+                                console.error('Error generating PDF:', error);
                                 process.exit(1);
-                            }' | node
+                            }
                         """
+
+                        sh 'node createReport.js'
                         
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
@@ -156,7 +156,10 @@ pipeline {
             }
             post {
                 always {
-                    sh 'rm -f cypress-output.txt'
+                    sh '''
+                        rm -f cypress-output.txt
+                        rm -f createReport.js
+                    '''
                 }
             }
         }
@@ -176,7 +179,6 @@ pipeline {
                 - Statut: RÉUSSI
                 - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 - Rapport PDF: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
-                - Vidéos: cypress/videos
             """
         }
         failure {
@@ -184,7 +186,7 @@ pipeline {
                 ❌ Bilan des Tests:
                 - Statut: ÉCHOUÉ
                 - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Voir le rapport pour plus de détails
+                - Consultez le rapport pour plus de détails
             """
         }
         cleanup {
