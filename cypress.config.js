@@ -1,15 +1,17 @@
 const { defineConfig } = require('cypress')
-
+const allureWriter = require('@shelex/cypress-allure-plugin/writer')
 
 module.exports = defineConfig({
   e2e: {
     setupNodeEvents(on, config) {
+      allureWriter(on, config);
       on('task', {
         log(message) {
-          console.log(`CYPRESS_LOG: ${message}`)
+          console.log(`CYPRESS_LOG: ${message}`);
           return null
         },
       })
+      return config;
     },
     baseUrl: 'https://www.franceculture.fr',
     defaultCommandTimeout: 10000,
