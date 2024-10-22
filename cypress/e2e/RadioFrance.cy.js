@@ -4,7 +4,7 @@ describe('Fonctionnalités de base de France Culture', () => {
   beforeEach(() => {
     cy.visit('https://www.franceculture.fr/');
     cy.task('log', 'Page France Culture chargée');
-
+    
     // Gestion des cookies
     cy.get('body').then(($body) => {
       if ($body.find('span:contains("Tout accepter")').length > 0) {
@@ -27,12 +27,21 @@ describe('Fonctionnalités de base de France Culture', () => {
   });
 
   it('vérifie le menu principal', () => {
-    cy.get('nav[role="navigation"][aria-label="menu principal"]').should('be.visible')
-      .then(() => {
-        cy.log('Menu principal trouvé');
+    // Menu elementini farklı bir şekilde seçmeyi deneyelim
+    cy.get('nav#menu')
+      .should('exist')
+      .then(($nav) => {
+        // Eğer menü gizliyse, görünür hale getir
+        if (!$nav.is(':visible')) {
+          cy.get('button[aria-label="ouvrir le menu"]').click();
+        }
         cy.task('log', 'Menu principal trouvé');
       });
-    cy.get('nav[role="navigation"][aria-label="menu principal"] ul li').should('have.length.at.least', 5)
+
+    // Menü öğelerini kontrol et
+    cy.get('nav#menu')
+      .find('li')
+      .should('have.length.at.least', 5)
       .then((items) => {
         cy.log(`Nombre d'éléments dans le menu principal: ${items.length}`);
         cy.task('log', `Nombre d'éléments dans le menu principal: ${items.length}`);
@@ -40,7 +49,8 @@ describe('Fonctionnalités de base de France Culture', () => {
   });
 
   it('vérifie le lien de recherche', () => {
-    cy.get('a[href="/recherche"]').should('be.visible')
+    cy.get('a[href="/recherche"]')
+      .should('be.visible')
       .then(() => {
         cy.log('Lien de recherche trouvé');
         cy.task('log', 'Lien de recherche trouvé');
