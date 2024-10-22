@@ -1,0 +1,17 @@
+{
+    "reporterEnabled": "mocha-junit-reporter, mochawesome",
+    "mochaJunitReporterReporterOptions": {
+        "mochaFile": "cypress/reports/junit/results-[hash].xml",
+        "toConsole": true
+    },
+    "reporterOptions": {
+        "reportDir": "cypress/reports/json",
+        "overwrite": false,
+        "html": false,
+        "json": true,
+        "charts": true,
+        "reportTitle": "Tests Cypress - France Culture",
+        "embeddedScreenshots": true,
+        "inlineAssets": true
+    }
+}
