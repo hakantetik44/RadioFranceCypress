@@ -32,48 +32,55 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "Cypress Testleri Başlıyor..."
+                        echo "🚀 Démarrage des Tests Cypress..."
                         
                         def testOutput = sh(
                             script: '''
+                                CYPRESS_REPORTER=cypress-multi-reporters \
+                                CYPRESS_REPORTER_CONFIG='{"reporterEnabled": ["spec", "mocha-junit-reporter"], "mochaJunitReporterReporterOptions": {"mochaFile": "cypress/results/results.xml"}}' \
                                 npx cypress run \
                                 --browser electron \
                                 --headless \
-                                --config defaultCommandTimeout=60000
+                                --env logCaptureEnabled=true \
+                                --config defaultCommandTimeout=60000,screenshotOnRunFailure=true \
+                                | tee test_output.log
                             ''',
                             returnStdout: true
                         ).trim()
-                        
-                        def testResults = testOutput.split('\n').findAll { line ->
-                            line.contains('Page France Culture chargée') ||
-                            line.contains('Cookies acceptés') ||
-                            line.contains('Menu principal trouvé') ||
-                            line.contains('Lien de recherche trouvé') ||
-                            line.contains('Tests:') ||
-                            line.contains('Passing:') ||
-                            line.contains('Failing:') ||
-                            line.contains('Duration:')
-                        }.collect { line ->
-                            line = line.replaceAll(/\x1B\[[0-9;]*[mGK]/, '')  // ANSI kodlarını temizle
-                            line = line.trim()
-                            
-                            // Türkçe çeviriler
-                            line = line.replaceAll(/^Tests:/, 'Toplam Test:')
-                            line = line.replaceAll(/Passing:/, 'Başarılı:')
-                            line = line.replaceAll(/Failing:/, 'Başarısız:')
-                            line = line.replaceAll(/Duration:/, 'Süre:')
-                            
-                            return "→ ${line}"
-                        }
-                        
-                        echo "Test Sonuçları:"
-                        testResults.each { result ->
-                            echo result
-                        }
-                        
+
+                        echo """
+                        📊 Résultats des Tests:
+                        ========================================"""
+
+                        // Test çıktılarını işle
+                        sh '''
+                            cat test_output.log | \
+                            grep -E "cy\\.(log|task)|Running:|✓|✖|^\\s*(it|describe)\\(|^\\s*│.*\\b(chargé|trouvé|accepté|détecté)\\b" | \
+                            sed -E 's/\\x1B\\[[0-9;]*[mGK]//g' | \
+                            sed -E 's/^\\s*cy\\.(log|task)\\(//g' | \
+                            sed -E 's/^\\s*│//g' | \
+                            while IFS= read -r line; do
+                                if [[ $line == *"Running:"* ]]; then
+                                    echo "🔎 Fichier de test: ${line#*Running:}"
+                                elif [[ $line == *"✓"* ]]; then
+                                    echo "  ✅ Test réussi: ${line#*✓}"
+                                elif [[ $line == *"✖"* ]]; then
+                                    echo "  ❌ Test échoué: ${line#*✖}"
+                                elif [[ $line == *"chargé"* ]] || [[ $line == *"trouvé"* ]] || [[ $line == *"accepté"* ]] || [[ $line == *"détecté"* ]]; then
+                                    echo "  ▶️ $line"
+                                elif [[ $line == *"describe("* ]]; then
+                                    echo "📋 Suite: ${line}"
+                                elif [[ $line == *"it("* ]]; then
+                                    echo "  🔍 Test: ${line}"
+                                else
+                                    echo "  $line"
+                                fi
+                            done
+                        '''
+
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
-                        error("Cypress testleri başarısız: ${e.message}")
+                        error("⚠️ Erreur lors des tests: ${e.message}")
                     }
                 }
             }
@@ -84,19 +91,21 @@ pipeline {
         success {
             script {
                 echo """
-                ✅ Test Özeti:
-                - Build Durumu: BAŞARILI
-                - Tamamlanma Zamanı: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                ✅ Résumé Final:
+                ----------------------------------------
+                - Statut: RÉUSSI
+                - Terminé à: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 """
             }
         }
         failure {
             script {
                 echo """
-                ❌ Test Özeti:
-                - Build Durumu: BAŞARISIZ
-                - Tamamlanma Zamanı: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Lütfen hata detayları için logları kontrol edin
+                ❌ Résumé Final:
+                ----------------------------------------
+                - Statut: ÉCHOUÉ
+                - Terminé à: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                - Consultez les logs pour plus de détails
                 """
             }
         }
