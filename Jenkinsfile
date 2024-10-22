@@ -34,6 +34,7 @@ pipeline {
                     try {
                         echo "Démarrage des Tests Cypress..."
                         
+                        // Cypress testlerini çalıştır ve çıktılarını Jenkins'e yazdır
                         def testOutput = sh(
                             script: '''
                                 npx cypress run \
@@ -44,31 +45,10 @@ pipeline {
                             returnStdout: true
                         ).trim()
                         
-                        def testResults = testOutput.split('\n').findAll { line ->
-                            line.contains('Page France Culture chargée') ||
-                            line.contains('Cookies acceptés') ||
-                            line.contains('Menu principal trouvé') ||
-                            line.contains('Lien de recherche trouvé') ||
-                            line.contains('Tests:') ||
-                            line.contains('Passing:') ||
-                            line.contains('Failing:') ||
-                            line.contains('Duration:')
-                        }.collect { line ->
-                            line = line.replaceAll(/\x1B\[[0-9;]*[mGK]/, '')  // Nettoyer les codes ANSI
-                            line = line.trim()
-                            
-                            // Traductions en français
-                            line = line.replaceAll(/^Tests:/, 'Nombre de Tests:')
-                            line = line.replaceAll(/Passing:/, 'Réussis:')
-                            line = line.replaceAll(/Failing:/, 'Échoués:')
-                            line = line.replaceAll(/Duration:/, 'Durée:')
-                            
-                            return "→ ${line}"
-                        }
-                        
-                        echo "Résultats des Tests:"
-                        testResults.each { result ->
-                            echo result
+                        // Test loglarını ayıkla ve Jenkins konsoluna gönder
+                        echo "Résultats des Tests Cypress:"
+                        testOutput.split('\n').each { line ->
+                            echo line
                         }
                         
                     } catch (Exception e) {
