@@ -1,63 +1,111 @@
 pipeline {
     agent any
-
+    
+    tools {
+        nodejs 'Node.js 22.9'
+    }
+    
     environment {
         CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
-        NODEJS_VERSION = 'Node.js_22.9'  // Node.js versiyonu belirtiliyor
     }
-
+    
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/hakantetik44/RadioFranceCypress.git'
+                checkout scm
             }
         }
-
+        
         stage('Install Dependencies') {
             steps {
-                script {
-                    // NodeJS versiyonu belirleme
-                    def nodejs = tool name: "${NODEJS_VERSION}", type: 'NodeJSInstallation'
-                    env.PATH = "${nodejs}/bin:${env.PATH}"
-                }
                 sh 'npm ci'
             }
         }
 
         stage('Prepare Cypress Cache') {
             steps {
-                sh 'mkdir -p ${CYPRESS_CACHE_FOLDER}'
+                sh 'mkdir -p $CYPRESS_CACHE_FOLDER'
             }
         }
 
         stage('Run Cypress Tests') {
             steps {
                 script {
-                    // Cypress komutunu çalıştır ve çıktıyı log dosyasına kaydet
-                    def testResults = sh(script: 'npx cypress run --browser electron --headless --config defaultCommandTimeout=60000 | tee cypress_output.log', returnStdout: true)
-
-                    // Test çıktısını düzenle ve daha anlaşılır hale getir
-                    sh """
-                    cat cypress_output.log | \
-                    sed -e 's/\\x1b\\[[0-9;]*m//g' | \
-                    sed -e '/^$/d' | \
-                    sed -e 's/^it/Test:/; s/^describe/Test Grubu:/; s/^  Running:/Test Dosyası:/; s/^✖/[BAŞARISIZ]/; s/^✓/[BAŞARILI]/' | \
-                    sed -e '/^DevTools listening/d; /^Opening Cypress/d; /^Opening.*failed/d' | \
-                    sed -e '/^tput:/d; /^===/d'
-                    """
-                    
-                    // Test sonuçlarını ekrana yazdır
-                    echo "Cypress Test Sonuçları:\n${testResults}"
+                    try {
+                        echo "Démarrage des Tests Cypress..."
+                        
+                        def testOutput = sh(
+                            script: '''
+                                npx cypress run \
+                                --browser electron \
+                                --headless \
+                                --config defaultCommandTimeout=60000
+                            ''',
+                            returnStdout: true
+                        ).trim()
+                        
+                        def testResults = testOutput.split('\n').findAll { line ->
+                            line.contains('Page France Culture chargée') ||
+                            line.contains('Cookies acceptés') ||
+                            line.contains('Menu principal trouvé') ||
+                            line.contains('Lien de recherche trouvé') ||
+                            line.contains('Tests:') ||
+                            line.contains('Passing:') ||
+                            line.contains('Failing:') ||
+                            line.contains('Duration:')
+                        }.collect { line ->
+                            line = line.replaceAll(/\x1B\[[0-9;]*[mGK]/, '')  // Nettoyer les codes ANSI
+                            line = line.trim()
+                            
+                            // Traductions en français
+                            line = line.replaceAll(/^Tests:/, 'Nombre de Tests:')
+                            line = line.replaceAll(/Passing:/, 'Réussis:')
+                            line = line.replaceAll(/Failing:/, 'Échoués:')
+                            line = line.replaceAll(/Duration:/, 'Durée:')
+                            
+                            return "→ ${line}"
+                        }
+                        
+                        echo "Résultats des Tests:"
+                        testResults.each { result ->
+                            echo result
+                        }
+                        
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        error("Tests Cypress échoués: ${e.message}")
+                    }
                 }
             }
         }
     }
-
+    
     post {
-        always {
-            // Her durumda çalışacak adımlar
-            junit '**/cypress_output.log'  // Test sonuçlarını JUnit formatında sakla
-            cleanWs()  // Çalışma alanını temizle
+        success {
+            script {
+                echo """
+                ✅ Résumé des Tests:
+                - Statut du Build: RÉUSSI
+                - Heure de Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                """
+            }
+        }
+        failure {
+            script {
+                echo """
+                ❌ Résumé des Tests:
+                - Statut du Build: ÉCHOUÉ
+                - Heure de Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                - Veuillez consulter les logs pour plus de détails
+                """
+            }
+        }
+        cleanup {
+            cleanWs(
+                cleanWhenSuccess: true,
+                cleanWhenFailure: true,
+                cleanWhenAborted: true
+            )
         }
     }
 }
