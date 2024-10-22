@@ -52,9 +52,7 @@ pipeline {
                                 npx cypress run \
                                 --browser electron \
                                 --headless \
-                                --config defaultCommandTimeout=60000 \
-                                --reporter cypress-multi-reporters \
-                                --reporter-options configFile=reporter-config.json | grep "CYPRESS_LOG:"
+                                --config video=true | tee >(grep "CYPRESS_LOG:")
                             ''',
                             returnStdout: true
                         ).trim()
@@ -70,46 +68,43 @@ pipeline {
                             echo "→ ${message}"
                         }
 
-                        // Raporları birleştir ve dönüştür
-                        sh '''
-                            npx mochawesome-merge ${REPORT_DIR}/json/*.json > ${REPORT_DIR}/mochawesome.json
-                            npx marge ${REPORT_DIR}/mochawesome.json --reportDir ${REPORT_DIR}/html --inline --charts --reportTitle "Tests Cypress - France Culture" --reportFilename report_${TIMESTAMP}
+                        // JSON raporlarını birleştir
+                        sh """
+                            npx mochawesome-merge "${REPORT_DIR}/json/*.json" > "${REPORT_DIR}/mochawesome_merged.json" || true
                             
-                            # PDF oluştur
-                            node -e '
-                                const fs = require("fs");
-                                const { jsPDF } = require("jspdf");
-                                const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/mochawesome.json", "utf8"));
+                            if [ -f "${REPORT_DIR}/mochawesome_merged.json" ]; then
+                                # HTML rapor oluştur
+                                npx marge "${REPORT_DIR}/mochawesome_merged.json" \
+                                    --reportDir "${REPORT_DIR}/html" \
+                                    --inline \
+                                    --charts \
+                                    --reportTitle "Tests Cypress - France Culture" \
+                                    --reportFilename "report_${TIMESTAMP}"
                                 
-                                const doc = new jsPDF();
-                                let y = 20;
-                                
-                                // Başlık
-                                doc.setFontSize(16);
-                                doc.text("Rapport de Tests Cypress - France Culture", 20, y);
-                                
-                                // Tarih
-                                y += 10;
-                                doc.setFontSize(12);
-                                doc.text("Date: " + new Date().toLocaleString(), 20, y);
-                                
-                                // Özet
-                                y += 20;
-                                doc.setFontSize(14);
-                                doc.text("Résumé des Tests:", 20, y);
-                                
-                                y += 10;
-                                doc.setFontSize(12);
-                                doc.text([
-                                    "Total des Tests: " + report.stats.tests,
-                                    "Tests Réussis: " + report.stats.passes,
-                                    "Tests Échoués: " + report.stats.failures,
-                                    "Durée: " + report.stats.duration + "ms"
-                                ], 30, y);
-                                
-                                doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
-                            '
-                        '''
+                                # PDF rapor oluştur
+                                node -e '
+                                    const fs = require("fs");
+                                    const { jsPDF } = require("jspdf");
+                                    
+                                    const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/mochawesome_merged.json", "utf8"));
+                                    const doc = new jsPDF();
+                                    
+                                    doc.setFontSize(16);
+                                    doc.text("Rapport de Tests Cypress", 20, 20);
+                                    
+                                    doc.setFontSize(12);
+                                    doc.text([
+                                        "Date: ${TIMESTAMP}",
+                                        "Total Tests: " + report.stats.tests,
+                                        "Passed: " + report.stats.passes,
+                                        "Failed: " + report.stats.failures,
+                                        "Duration: " + report.stats.duration + "ms"
+                                    ], 20, 40);
+                                    
+                                    doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
+                                '
+                            fi
+                        """
                         
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
@@ -122,9 +117,13 @@ pipeline {
     
     post {
         always {
-            // Raporları arşivle
-            archiveArtifacts artifacts: "${REPORT_DIR}/**/*", allowEmptyArchive: true
-            junit "${REPORT_DIR}/junit/*.xml"
+            archiveArtifacts artifacts: '''
+                ${REPORT_DIR}/**/*,
+                cypress/videos/**/*,
+                cypress/screenshots/**/*
+            ''', allowEmptyArchive: true
+            
+            junit allowEmptyResults: true, testResults: "${REPORT_DIR}/junit/*.xml"
         }
         success {
             script {
@@ -132,7 +131,7 @@ pipeline {
                 ✅ Résumé des Tests:
                 - Statut du Build: RÉUSSI
                 - Heure de Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Rapports disponibles dans le dossier '${REPORT_DIR}'
+                - Rapports disponibles dans '${REPORT_DIR}'
                 """
             }
         }
@@ -142,7 +141,7 @@ pipeline {
                 ❌ Résumé des Tests:
                 - Statut du Build: ÉCHOUÉ
                 - Heure de Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Veuillez consulter les logs et les rapports pour plus de détails
+                - Veuillez consulter les logs et les rapports
                 """
             }
         }

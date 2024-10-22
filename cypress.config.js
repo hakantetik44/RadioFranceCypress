@@ -13,11 +13,11 @@ module.exports = defineConfig({
     video: true,
     videosFolder: 'cypress/videos',
     screenshotOnRunFailure: true,
-    reporter: 'spec',
+    reporter: 'cypress-multi-reporters',
     reporterOptions: {
-      toConsole: true
+      configFile: 'reporter-config.json'
     }
   },
   defaultCommandTimeout: 60000,
-  pageLoadTimeout: 60000,
+  pageLoadTimeout: 60000
 })
