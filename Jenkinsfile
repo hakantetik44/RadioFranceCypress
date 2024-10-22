@@ -21,18 +21,24 @@ pipeline {
             steps {
                 script {
                     try {
+                        echo "Checking for gradlew file..."
+                        sh 'ls -la ./gradlew'  // Check if gradlew exists
+
                         echo "Starting build process..."
-                        sh './gradlew build'
+                        sh './gradlew build'  // Execute the gradle build
                         echo "\u001B[32mBuild completed successfully! ✅\u001B[0m" // Success with green check mark
                     } catch (e) {
                         echo "\u001B[31mBuild failed! ❌\u001B[0m" // Fail with red cross
-                        error("Build stage failed.")
+                        error("Build stage failed: gradlew file missing or build command failed.")
                     }
                 }
             }
         }
 
         stage('Test') {
+            when {
+                expression { currentBuild.result == null } // Run only if previous stages succeeded
+            }
             steps {
                 script {
                     try {
@@ -48,6 +54,9 @@ pipeline {
         }
 
         stage('Deploy') {
+            when {
+                expression { currentBuild.result == null } // Run only if previous stages succeeded
+            }
             steps {
                 script {
                     try {
