@@ -46,20 +46,26 @@ pipeline {
                     try {
                         echo "Démarrage des Tests Cypress..."
                         
-                        // Test çıktısını al ve işle
+                        // Test çıktısını dosyaya yazıp okuma
+                        sh '''
+                            npx cypress run \
+                            --browser electron \
+                            --headless \
+                            --config video=true \
+                            --reporter cypress-multi-reporters \
+                            --reporter-options configFile=reporter-config.json \
+                            2>&1 | tee cypress-output.log
+                        '''
+
+                        // Log dosyasından CYPRESS_LOG mesajlarını oku
                         def testOutput = sh(
-                            script: '''
-                                npx cypress run \
-                                --browser electron \
-                                --headless \
-                                --config video=true | tee >(grep "CYPRESS_LOG:")
-                            ''',
+                            script: "grep 'CYPRESS_LOG:' cypress-output.log || true",
                             returnStdout: true
                         ).trim()
 
-                        // Log mesajlarını topla
+                        // Log mesajlarını işle
                         def logMessages = testOutput.split('\n')
-                            .findAll { it.contains('CYPRESS_LOG:') }
+                            .findAll { it.length() > 0 }
                             .collect { it.replace('CYPRESS_LOG:', '').trim() }
 
                         // Test sonuçlarını yazdır
@@ -68,13 +74,11 @@ pipeline {
                             echo "→ ${message}"
                         }
 
-                        // JSON raporlarını birleştir
+                        // Rapor oluştur
                         sh """
-                            npx mochawesome-merge "${REPORT_DIR}/json/*.json" > "${REPORT_DIR}/mochawesome_merged.json" || true
-                            
-                            if [ -f "${REPORT_DIR}/mochawesome_merged.json" ]; then
+                            if [ -f "${REPORT_DIR}/json/mochawesome.json" ]; then
                                 # HTML rapor oluştur
-                                npx marge "${REPORT_DIR}/mochawesome_merged.json" \
+                                npx marge "${REPORT_DIR}/json/mochawesome.json" \
                                     --reportDir "${REPORT_DIR}/html" \
                                     --inline \
                                     --charts \
@@ -86,22 +90,26 @@ pipeline {
                                     const fs = require("fs");
                                     const { jsPDF } = require("jspdf");
                                     
-                                    const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/mochawesome_merged.json", "utf8"));
-                                    const doc = new jsPDF();
-                                    
-                                    doc.setFontSize(16);
-                                    doc.text("Rapport de Tests Cypress", 20, 20);
-                                    
-                                    doc.setFontSize(12);
-                                    doc.text([
-                                        "Date: ${TIMESTAMP}",
-                                        "Total Tests: " + report.stats.tests,
-                                        "Passed: " + report.stats.passes,
-                                        "Failed: " + report.stats.failures,
-                                        "Duration: " + report.stats.duration + "ms"
-                                    ], 20, 40);
-                                    
-                                    doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
+                                    try {
+                                        const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/json/mochawesome.json", "utf8"));
+                                        const doc = new jsPDF();
+                                        
+                                        doc.setFontSize(16);
+                                        doc.text("Rapport de Tests Cypress", 20, 20);
+                                        
+                                        doc.setFontSize(12);
+                                        doc.text([
+                                            "Date: ${TIMESTAMP}",
+                                            "Total Tests: " + report.stats.tests,
+                                            "Passed: " + report.stats.passes,
+                                            "Failed: " + report.stats.failures,
+                                            "Duration: " + report.stats.duration + "ms"
+                                        ], 20, 40);
+                                        
+                                        doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
+                                    } catch (err) {
+                                        console.error("Erreur lors de la création du PDF:", err);
+                                    }
                                 '
                             fi
                         """
@@ -112,18 +120,23 @@ pipeline {
                     }
                 }
             }
+            post {
+                always {
+                    sh 'rm -f cypress-output.log || true'
+                }
+            }
         }
     }
     
     post {
         always {
-            archiveArtifacts artifacts: '''
+            archiveArtifacts artifacts: """
                 ${REPORT_DIR}/**/*,
                 cypress/videos/**/*,
                 cypress/screenshots/**/*
-            ''', allowEmptyArchive: true
+            """, allowEmptyArchive: true
             
-            junit allowEmptyResults: true, testResults: "${REPORT_DIR}/junit/*.xml"
+            junit allowEmptyResults: true, testResults: "${REPORT_DIR}/junit/results*.xml"
         }
         success {
             script {
