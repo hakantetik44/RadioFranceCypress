@@ -22,8 +22,7 @@ pipeline {
             steps {
                 sh '''
                     npm ci
-                    npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter
-                    npm install --save-dev jspdf
+                    npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
                 '''
             }
         }
@@ -32,10 +31,7 @@ pipeline {
             steps {
                 sh '''
                     mkdir -p $CYPRESS_CACHE_FOLDER
-                    mkdir -p ${REPORT_DIR}/json
-                    mkdir -p ${REPORT_DIR}/html
-                    mkdir -p ${REPORT_DIR}/pdf
-                    mkdir -p ${REPORT_DIR}/junit
+                    mkdir -p ${REPORT_DIR}/{json,html,pdf,junit}
                 '''
             }
         }
@@ -44,40 +40,31 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "Démarrage des Tests Cypress..."
+                        echo "🚀 Démarrage des Tests Cypress..."
                         
-                        // Test çıktısını dosyaya yazıp okuma
+                        // Testleri çalıştır
                         sh '''
                             npx cypress run \
                             --browser electron \
                             --headless \
                             --config video=true \
                             --reporter cypress-multi-reporters \
-                            --reporter-options configFile=reporter-config.json \
-                            2>&1 | tee cypress-output.log
+                            --reporter-options configFile=reporter-config.json | grep "CYPRESS_LOG:" > cypress-output.log
                         '''
 
-                        // Log dosyasından CYPRESS_LOG mesajlarını oku
-                        def testOutput = sh(
-                            script: "grep 'CYPRESS_LOG:' cypress-output.log || true",
-                            returnStdout: true
-                        ).trim()
-
-                        // Log mesajlarını işle
-                        def logMessages = testOutput.split('\n')
+                        // Log mesajlarını oku ve göster
+                        def logMessages = readFile('cypress-output.log').split('\n')
                             .findAll { it.length() > 0 }
                             .collect { it.replace('CYPRESS_LOG:', '').trim() }
 
-                        // Test sonuçlarını yazdır
-                        echo "=== Résultats des Tests ==="
+                        echo "\n📋 Résultats des Tests:"
                         logMessages.each { message ->
-                            echo "→ ${message}"
+                            echo "  ➜ ${message}"
                         }
 
-                        // Rapor oluştur
+                        // Raporları oluştur
                         sh """
                             if [ -f "${REPORT_DIR}/json/mochawesome.json" ]; then
-                                # HTML rapor oluştur
                                 npx marge "${REPORT_DIR}/json/mochawesome.json" \
                                     --reportDir "${REPORT_DIR}/html" \
                                     --inline \
@@ -85,38 +72,32 @@ pipeline {
                                     --reportTitle "Tests Cypress - France Culture" \
                                     --reportFilename "report_${TIMESTAMP}"
                                 
-                                # PDF rapor oluştur
                                 node -e '
                                     const fs = require("fs");
                                     const { jsPDF } = require("jspdf");
+                                    const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/json/mochawesome.json", "utf8"));
                                     
-                                    try {
-                                        const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/json/mochawesome.json", "utf8"));
-                                        const doc = new jsPDF();
-                                        
-                                        doc.setFontSize(16);
-                                        doc.text("Rapport de Tests Cypress", 20, 20);
-                                        
-                                        doc.setFontSize(12);
-                                        doc.text([
-                                            "Date: ${TIMESTAMP}",
-                                            "Total Tests: " + report.stats.tests,
-                                            "Passed: " + report.stats.passes,
-                                            "Failed: " + report.stats.failures,
-                                            "Duration: " + report.stats.duration + "ms"
-                                        ], 20, 40);
-                                        
-                                        doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
-                                    } catch (err) {
-                                        console.error("Erreur lors de la création du PDF:", err);
-                                    }
+                                    const doc = new jsPDF();
+                                    doc.setFontSize(16);
+                                    doc.text("Rapport de Tests Cypress - France Culture", 20, 20);
+                                    
+                                    doc.setFontSize(12);
+                                    doc.text([
+                                        "Date: ${TIMESTAMP}",
+                                        "Tests total: " + report.stats.tests,
+                                        "Tests réussis: " + report.stats.passes,
+                                        "Tests échoués: " + report.stats.failures,
+                                        "Durée: " + Math.round(report.stats.duration/1000) + " secondes"
+                                    ], 20, 40);
+                                    
+                                    doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
                                 '
                             fi
                         """
                         
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
-                        error("Tests Cypress échoués: ${e.message}")
+                        error("❌ Tests Cypress échoués: ${e.message}")
                     }
                 }
             }
@@ -135,35 +116,28 @@ pipeline {
                 cypress/videos/**/*,
                 cypress/screenshots/**/*
             """, allowEmptyArchive: true
-            
-            junit allowEmptyResults: true, testResults: "${REPORT_DIR}/junit/results*.xml"
         }
         success {
             script {
                 echo """
-                ✅ Résumé des Tests:
-                - Statut du Build: RÉUSSI
-                - Heure de Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Rapports disponibles dans '${REPORT_DIR}'
+                ✅ Bilan des Tests:
+                - Statut: RÉUSSI
+                - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                - Rapports disponibles dans: ${REPORT_DIR}
                 """
             }
         }
         failure {
             script {
                 echo """
-                ❌ Résumé des Tests:
-                - Statut du Build: ÉCHOUÉ
-                - Heure de Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Veuillez consulter les logs et les rapports
+                ❌ Bilan des Tests:
+                - Statut: ÉCHOUÉ
+                - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 """
             }
         }
         cleanup {
-            cleanWs(
-                cleanWhenSuccess: true,
-                cleanWhenFailure: true,
-                cleanWhenAborted: true
-            )
+            cleanWs(cleanWhenSuccess: true, cleanWhenFailure: true, cleanWhenAborted: true)
         }
     }
 }
