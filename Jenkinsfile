@@ -1,91 +1,77 @@
 pipeline {
     agent any
-    
-    tools {
-        nodejs 'Node.js 22.9'
-    }
-    
-    environment {
-        CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
-    }
-    
+
     stages {
         stage('Checkout') {
             steps {
-                checkout scm
-            }
-        }
-        
-        stage('Install Dependencies') {
-            steps {
-                sh 'npm ci'
-            }
-        }
-
-        stage('Prepare Cypress Cache') {
-            steps {
-                sh 'mkdir -p $CYPRESS_CACHE_FOLDER'
+                script {
+                    try {
+                        echo "Starting checkout..."
+                        checkout scm
+                        echo "\u001B[32mCheckout completed successfully! ✅\u001B[0m" // Success with green check mark
+                    } catch (e) {
+                        echo "\u001B[31mCheckout failed! ❌\u001B[0m" // Fail with red cross
+                        error("Checkout stage failed.")
+                    }
+                }
             }
         }
 
-        stage('Run Cypress Tests') {
+        stage('Build') {
             steps {
                 script {
                     try {
-                        echo "Démarrage des Tests Cypress..."
-                        
-                        // Cypress testlerini çalıştır ve çıktılarını Jenkins'e yazdır
-                        def testOutput = sh(
-                            script: '''
-                                npx cypress run \
-                                --browser electron \
-                                --headless \
-                                --config defaultCommandTimeout=60000
-                            ''',
-                            returnStdout: true
-                        ).trim()
-                        
-                        // Test loglarını ayıkla ve Jenkins konsoluna gönder
-                        echo "Résultats des Tests Cypress:"
-                        testOutput.split('\n').each { line ->
-                            echo line
-                        }
-                        
-                    } catch (Exception e) {
-                        currentBuild.result = 'FAILURE'
-                        error("Tests Cypress échoués: ${e.message}")
+                        echo "Starting build process..."
+                        sh './gradlew build'
+                        echo "\u001B[32mBuild completed successfully! ✅\u001B[0m" // Success with green check mark
+                    } catch (e) {
+                        echo "\u001B[31mBuild failed! ❌\u001B[0m" // Fail with red cross
+                        error("Build stage failed.")
+                    }
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                script {
+                    try {
+                        echo "Running tests..."
+                        sh './gradlew test'
+                        echo "\u001B[32mTests passed successfully! ✅\u001B[0m" // Success with green check mark
+                    } catch (e) {
+                        echo "\u001B[31mTests failed! ❌\u001B[0m" // Fail with red cross
+                        error("Test stage failed.")
+                    }
+                }
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                    try {
+                        echo "Starting deployment..."
+                        // Deploy command goes here
+                        echo "\u001B[32mDeployment successful! ✅\u001B[0m" // Success with green check mark
+                    } catch (e) {
+                        echo "\u001B[31mDeployment failed! ❌\u001B[0m" // Fail with red cross
+                        error("Deployment stage failed.")
                     }
                 }
             }
         }
     }
-    
+
     post {
+        always {
+            echo 'Pipeline finished.'
+        }
         success {
-            script {
-                echo """
-                ✅ Résumé des Tests:
-                - Statut du Build: RÉUSSI
-                - Heure de Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                """
-            }
+            echo "\u001B[32mPipeline completed successfully! ✅\u001B[0m"
         }
         failure {
-            script {
-                echo """
-                ❌ Résumé des Tests:
-                - Statut du Build: ÉCHOUÉ
-                - Heure de Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Veuillez consulter les logs pour plus de détails
-                """
-            }
-        }
-        cleanup {
-            cleanWs(
-                cleanWhenSuccess: true,
-                cleanWhenFailure: true,
-                cleanWhenAborted: true
-            )
+            echo "\u001B[31mPipeline failed! ❌\u001B[0m"
         }
     }
 }
