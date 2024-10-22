@@ -1,12 +1,20 @@
 {
-    "reporterEnabled": "spec, mocha-junit-reporter, mochawesome",
+    "reporterEnabled": "mocha-junit-reporter, @shelex/cypress-allure-plugin",
     "mochaJunitReporterReporterOptions": {
-        "mochaFile": "cypress/reports/junit/results-[hash].xml"
+      "mochaFile": "cypress/reports/junit/results-[hash].xml",
+      "toConsole": true,  
+      "attachments": true,  
+      "testsuitesTitle": "Cypress Test Results"  
     },
-    "mochawesomeReporterOptions": {
-        "reportDir": "cypress/reports/json",
-        "overwrite": false,
-        "html": false,
-        "json": true
+    "allureReporterOptions": {
+      "reportDir": "allure-results",  
+      "overwrite": false, 
+      "useCypressStepReporter": true,  
+      "cypressLogFile": "cypress/reports/allure/allure-log.txt", 
+      "disableWebdriverStepsReporting": true,  
+      "disableWebdriverScreenshotsReporting": false,  
+      "issuePrefix": "#",  
+      "enableScreenshotDiffPlugin": true  
     }
-}
+  }
+  
