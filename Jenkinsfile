@@ -34,46 +34,47 @@ pipeline {
                     try {
                         echo "🚀 Démarrage des Tests Cypress..."
                         
-                        def testOutput = sh(
-                            script: '''
-                                CYPRESS_REPORTER=cypress-multi-reporters \
-                                CYPRESS_REPORTER_CONFIG='{"reporterEnabled": ["spec", "mocha-junit-reporter"], "mochaJunitReporterReporterOptions": {"mochaFile": "cypress/results/results.xml"}}' \
-                                npx cypress run \
-                                --browser electron \
-                                --headless \
-                                --env logCaptureEnabled=true \
-                                --config defaultCommandTimeout=60000,screenshotOnRunFailure=true \
-                                | tee test_output.log
-                            ''',
-                            returnStdout: true
-                        ).trim()
-
-                        echo """
-                        📊 Résultats des Tests:
-                        ========================================"""
-
-                        // Test çıktılarını işle
+                        // Test çıktısını bir dosyaya yazalım
                         sh '''
-                            cat test_output.log | \
-                            grep -E "cy\\.(log|task)|Running:|✓|✖|^\\s*(it|describe)\\(|^\\s*│.*\\b(chargé|trouvé|accepté|détecté)\\b" | \
+                            npx cypress run \
+                            --browser electron \
+                            --headless \
+                            --config defaultCommandTimeout=60000 \
+                            2>&1 | tee cypress_complete_output.log
+                        '''
+                        
+                        echo "📊 Résultats des Tests:"
+                        echo "========================================"
+                        
+                        // Test çıktılarını işleyelim
+                        sh '''
+                            cat cypress_complete_output.log | \
+                            grep -A1 -B1 "CYPRESS_LOG\\|Running:\\|✓\\|✖\\|describe\\|it(" | \
                             sed -E 's/\\x1B\\[[0-9;]*[mGK]//g' | \
-                            sed -E 's/^\\s*cy\\.(log|task)\\(//g' | \
-                            sed -E 's/^\\s*│//g' | \
                             while IFS= read -r line; do
-                                if [[ $line == *"Running:"* ]]; then
-                                    echo "🔎 Fichier de test: ${line#*Running:}"
+                                if [[ $line == *"CYPRESS_LOG:"* ]]; then
+                                    message=$(echo "$line" | sed 's/.*CYPRESS_LOG: //')
+                                    echo "  ▶️ $message"
+                                elif [[ $line == *"Running: "* ]]; then
+                                    echo "🔎 Fichier de test: ${line#*Running: }"
+                                elif [[ $line == *"describe"* ]]; then
+                                    echo "📋 Suite de test: ${line}"
+                                elif [[ $line == *"it("* ]]; then
+                                    echo "  🔍 Test: ${line}"
                                 elif [[ $line == *"✓"* ]]; then
                                     echo "  ✅ Test réussi: ${line#*✓}"
                                 elif [[ $line == *"✖"* ]]; then
                                     echo "  ❌ Test échoué: ${line#*✖}"
-                                elif [[ $line == *"chargé"* ]] || [[ $line == *"trouvé"* ]] || [[ $line == *"accepté"* ]] || [[ $line == *"détecté"* ]]; then
+                                elif [[ $line =~ "Page France Culture chargée" ]]; then
+                                    echo "  ▶️ Page chargée"
+                                elif [[ $line =~ "Cookies acceptés" ]]; then
+                                    echo "  ▶️ Cookies acceptés"
+                                elif [[ $line =~ "Menu principal trouvé" ]]; then
+                                    echo "  ▶️ Menu trouvé"
+                                elif [[ $line =~ "Titre de la page:" ]]; then
                                     echo "  ▶️ $line"
-                                elif [[ $line == *"describe("* ]]; then
-                                    echo "📋 Suite: ${line}"
-                                elif [[ $line == *"it("* ]]; then
-                                    echo "  🔍 Test: ${line}"
-                                else
-                                    echo "  $line"
+                                elif [[ $line =~ "Lien de recherche trouvé" ]]; then
+                                    echo "  ▶️ Lien trouvé"
                                 fi
                             done
                         '''

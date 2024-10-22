@@ -2,25 +2,21 @@ const { defineConfig } = require('cypress')
 
 module.exports = defineConfig({
   e2e: {
-    video: true,
-    videoCompression: 32,
-    videosFolder: 'cypress/videos',
-    screenshotOnRunFailure: true,
     setupNodeEvents(on, config) {
       on('task', {
         log(message) {
-          console.log(message)
+          console.log(`CYPRESS_LOG: ${message}`)
           return null
         },
       })
     },
-  },
-  reporter: 'mocha',
-  reporterOptions: {
-    reportDir: 'cypress/results',
-    overwrite: false,
-    html: false,
-    json: true,
+    video: true,
+    videosFolder: 'cypress/videos',
+    screenshotOnRunFailure: true,
+    reporter: 'spec',
+    reporterOptions: {
+      toConsole: true
+    }
   },
   defaultCommandTimeout: 60000,
   pageLoadTimeout: 60000,
