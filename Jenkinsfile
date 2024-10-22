@@ -54,11 +54,8 @@ pipeline {
                                 --reporter-options configFile=reporter-config.json | tee test-output.log
                         '''
 
-                        // Log mesajlarını oku
-                        def testLogs = sh(script: "grep 'CYPRESS_LOG:' test-output.log || true", returnStdout: true).trim()
-                        
                         // Mochawesome raporlarını birleştir
-                        sh '''
+                        sh """
                             npx mochawesome-merge "${REPORT_DIR}/mocha/*.json" > "${REPORT_DIR}/mochawesome_merged.json"
                             npx marge "${REPORT_DIR}/mochawesome_merged.json" \
                                 --reportDir "${REPORT_DIR}/html" \
@@ -66,12 +63,11 @@ pipeline {
                                 --charts \
                                 --reportTitle "Tests Cypress - France Culture" \
                                 --reportFilename "report_${TIMESTAMP}"
-                        '''
+                        """
 
                         // PDF rapor oluştur
                         sh """
-                            node -e '
-                                const fs = require("fs");
+                            node -e 'const fs = require("fs");
                                 const { jsPDF } = require("jspdf");
                                 const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/mochawesome_merged.json", "utf8"));
                                 
@@ -102,7 +98,7 @@ pipeline {
                                 report.results[0].suites[0].tests.forEach(test => {
                                     y += 10;
                                     const status = test.pass ? "✓" : "✗";
-                                    doc.text(\`\${status} \${test.title}\`, 25, y);
+                                    doc.text(status + " " + test.title, 25, y);
                                     if (test.context) {
                                         y += 5;
                                         doc.setFontSize(9);
@@ -111,11 +107,11 @@ pipeline {
                                     }
                                 });
                                 
-                                doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
-                            '
+                                doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");'
                         """
                         
                         // Test loglarını göster
+                        def testLogs = sh(script: "grep 'CYPRESS_LOG:' test-output.log || true", returnStdout: true).trim()
                         echo "\n📋 Résultats des Tests:"
                         testLogs.split('\n').each { log ->
                             if (log) {
@@ -139,11 +135,11 @@ pipeline {
     
     post {
         always {
-            archiveArtifacts artifacts: """
+            archiveArtifacts artifacts: '''
                 ${REPORT_DIR}/**/*,
                 cypress/videos/**/*,
                 cypress/screenshots/**/*
-            """, allowEmptyArchive: true
+            ''', allowEmptyArchive: true
             
             junit allowEmptyResults: true, testResults: "${REPORT_DIR}/junit/*.xml"
         }
