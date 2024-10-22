@@ -13,10 +13,6 @@ pipeline {
         GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
     }
 
-    options {
-        timestamps()  // Logları temiz tutmak için zaman damgası ekler
-    }
-
     stages {
         stage('Preparation') {
             steps {
@@ -54,17 +50,40 @@ pipeline {
                     try {
                         echo "🧪 Running Cypress tests..."
 
-                        // Cypress testlerini çalıştır, gereksiz logları temizle
+                        // Cypress testlerini çalıştır ve logları temizle
                         sh '''
                             npx cypress run \
                             --browser electron \
                             --headless \
                             --reporter mochawesome \
                             --reporter-options configFile=reporter-config.json \
-                            2>&1 | sed -r "s/\\x1b\\[[0-9;]*m//g" | grep -v 'DevTools listening' | grep -v 'tput:' | grep -v '[90m' | tee cypress-output.txt
+                            2>&1 | sed -r "s/\\x1b\\[[0-9;]*m//g" | tee cypress-output.txt
                         '''
 
-                        // Rapor oluşturma kodu burada olabilir
+                        // Raporu oluştur
+                        writeFile file: 'createReport.js', text: """
+                            const fs = require('fs');
+                            const { jsPDF } = require('jspdf');
+
+                            try {
+                                const report = JSON.parse(fs.readFileSync('mochawesome-report/mochawesome.json', 'utf8'));
+                                const testOutput = fs.readFileSync('cypress-output.txt', 'utf8');
+                                const doc = new jsPDF();
+
+                                // PDF içeriği oluşturma
+                                doc.setFontSize(28);
+                                doc.text('Test Report', 20, 30);
+
+                                // PDF'i kaydet
+                                doc.save('${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf');
+                            } catch (err) {
+                                console.error(err);
+                                process.exit(1);
+                            }
+                        """
+
+                        // Raporu çalıştır
+                        sh 'node createReport.js'
                         
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
