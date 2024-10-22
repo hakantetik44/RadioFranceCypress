@@ -10,14 +10,17 @@ module.exports = defineConfig({
         },
       })
     },
+    baseUrl: 'https://www.franceculture.fr',
+    defaultCommandTimeout: 10000,
+    pageLoadTimeout: 30000,
+    responseTimeout: 30000,
+    requestTimeout: 10000,
     video: true,
     videosFolder: 'cypress/videos',
     screenshotOnRunFailure: true,
-    reporter: 'cypress-multi-reporters',
-    reporterOptions: {
-      configFile: 'reporter-config.json'
+    retries: {
+      runMode: 2,
+      openMode: 0
     }
-  },
-  defaultCommandTimeout: 60000,
-  pageLoadTimeout: 60000
+  }
 })
