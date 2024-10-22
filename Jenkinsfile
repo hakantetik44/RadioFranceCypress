@@ -8,9 +8,9 @@ pipeline {
                     try {
                         echo "Starting checkout..."
                         checkout scm
-                        echo "\u001B[32mCheckout completed successfully! ✅\u001B[0m" // Success with green check mark
+                        echo "\u001B[32mCheckout completed successfully! ✅\u001B[0m"
                     } catch (e) {
-                        echo "\u001B[31mCheckout failed! ❌\u001B[0m" // Fail with red cross
+                        echo "\u001B[31mCheckout failed! ❌\u001B[0m"
                         error("Checkout stage failed.")
                     }
                 }
@@ -22,13 +22,13 @@ pipeline {
                 script {
                     try {
                         echo "Checking for gradlew file..."
-                        sh 'ls -la ./gradlew'  // Check if gradlew exists
+                        sh 'ls -la ./gradlew'  // Gradlew dosyasının varlığını kontrol et
 
                         echo "Starting build process..."
-                        sh './gradlew build'  // Execute the gradle build
-                        echo "\u001B[32mBuild completed successfully! ✅\u001B[0m" // Success with green check mark
+                        sh './gradlew build'  // Gradle build komutunu çalıştır
+                        echo "\u001B[32mBuild completed successfully! ✅\u001B[0m"
                     } catch (e) {
-                        echo "\u001B[31mBuild failed! ❌\u001B[0m" // Fail with red cross
+                        echo "\u001B[31mBuild failed! ❌\u001B[0m"
                         error("Build stage failed: gradlew file missing or build command failed.")
                     }
                 }
@@ -37,16 +37,16 @@ pipeline {
 
         stage('Test') {
             when {
-                expression { currentBuild.result == null } // Run only if previous stages succeeded
+                expression { currentBuild.result == null }
             }
             steps {
                 script {
                     try {
                         echo "Running tests..."
                         sh './gradlew test'
-                        echo "\u001B[32mTests passed successfully! ✅\u001B[0m" // Success with green check mark
+                        echo "\u001B[32mTests passed successfully! ✅\u001B[0m"
                     } catch (e) {
-                        echo "\u001B[31mTests failed! ❌\u001B[0m" // Fail with red cross
+                        echo "\u001B[31mTests failed! ❌\u001B[0m"
                         error("Test stage failed.")
                     }
                 }
@@ -55,16 +55,16 @@ pipeline {
 
         stage('Deploy') {
             when {
-                expression { currentBuild.result == null } // Run only if previous stages succeeded
+                expression { currentBuild.result == null }
             }
             steps {
                 script {
                     try {
                         echo "Starting deployment..."
-                        // Deploy command goes here
-                        echo "\u001B[32mDeployment successful! ✅\u001B[0m" // Success with green check mark
+                        // Deploy komutunu buraya ekleyin
+                        echo "\u001B[32mDeployment successful! ✅\u001B[0m"
                     } catch (e) {
-                        echo "\u001B[31mDeployment failed! ❌\u001B[0m" // Fail with red cross
+                        echo "\u001B[31mDeployment failed! ❌\u001B[0m"
                         error("Deployment stage failed.")
                     }
                 }
