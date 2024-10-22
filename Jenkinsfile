@@ -40,10 +40,11 @@ pipeline {
         stage('Run Cypress Tests') {
             steps {
                 script {
+                    def testStatus = 'SUCCESS'
                     try {
                         echo "🚀 Démarrage des Tests Cypress..."
                         
-                        // Test çalıştırma ve log kaydetme
+                        // Testleri çalıştır
                         sh '''
                             npx cypress run \
                             --browser electron \
@@ -54,13 +55,12 @@ pipeline {
                             2>&1 | tee cypress-output.txt
                         '''
 
-                        // Logları ayıkla
+                        // Log mesajlarını oku
                         def testOutput = sh(
                             script: 'cat cypress-output.txt | grep "CYPRESS_LOG:" || true',
                             returnStdout: true
                         ).trim()
 
-                        // Test sonuçlarını göster
                         echo "\n📋 Résultats des Tests:"
                         testOutput.split('\n').each { line ->
                             if (line) {
@@ -69,20 +69,16 @@ pipeline {
                         }
 
                         // HTML rapor oluştur
-                        sh """
-                            if [ -f "${REPORT_DIR}/json/mochawesome.json" ]; then
+                        if (fileExists("${REPORT_DIR}/json/mochawesome.json")) {
+                            sh """
                                 npx marge "${REPORT_DIR}/json/mochawesome.json" \
                                     --reportDir "${REPORT_DIR}/html" \
                                     --inline \
                                     --charts \
                                     --reportTitle "Tests Cypress - France Culture" \
                                     --reportFilename "report_${TIMESTAMP}"
-                            fi
-                        """
 
-                        // PDF rapor oluştur
-                        sh """
-                            if [ -f "${REPORT_DIR}/json/mochawesome.json" ]; then
+                                # PDF rapor oluştur
                                 node -e '
                                     const fs = require("fs");
                                     const { jsPDF } = require("jspdf");
@@ -90,42 +86,34 @@ pipeline {
                                         const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/json/mochawesome.json", "utf8"));
                                         const doc = new jsPDF();
                                         
-                                        // Başlık
                                         doc.setFontSize(16);
                                         doc.text("Rapport de Tests Cypress - France Culture", 20, 20);
                                         
-                                        // Test özeti
                                         doc.setFontSize(12);
-                                        doc.text([
+                                        const stats = [
                                             "Date: ${TIMESTAMP}",
                                             "Tests total: " + report.stats.tests,
                                             "Tests réussis: " + report.stats.passes,
                                             "Tests échoués: " + report.stats.failures,
                                             "Durée: " + Math.round(report.stats.duration/1000) + " secondes"
-                                        ], 20, 40);
-                                        
-                                        // Test detayları
-                                        let y = 80;
-                                        report.results[0].suites.forEach(suite => {
-                                            suite.tests.forEach(test => {
-                                                const status = test.state === "passed" ? "✓" : "✗";
-                                                doc.text(`${status} ${test.title}`, 20, y);
-                                                y += 10;
-                                            });
-                                        });
+                                        ];
+                                        doc.text(stats, 20, 40);
                                         
                                         doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
                                     } catch (err) {
-                                        console.error("Erreur lors de la création du PDF:", err);
+                                        console.error("Error:", err);
                                     }
                                 '
-                            fi
-                        """
+                            """
+                        }
 
                     } catch (Exception e) {
-                        currentBuild.result = 'FAILURE'
+                        testStatus = 'FAILURE'
                         error("❌ Tests Cypress échoués: ${e.message}")
                     }
+                    
+                    // Test durumunu kaydet
+                    env.TEST_STATUS = testStatus
                 }
             }
             post {
@@ -138,11 +126,11 @@ pipeline {
     
     post {
         always {
-            archiveArtifacts artifacts: '''
+            archiveArtifacts artifacts: """
                 cypress/reports/**/*,
                 cypress/videos/**/*,
                 cypress/screenshots/**/*
-            ''', allowEmptyArchive: true
+            """, allowEmptyArchive: true
         }
         success {
             script {
