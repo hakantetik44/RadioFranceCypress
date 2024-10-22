@@ -14,20 +14,19 @@ pipeline {
     }
 
     options {
-        // Disable ANSI color codes in console output
-        ansiColor('xterm')  // This can clean up the console log formatting
+        timestamps()  // Adds timestamps to the console output
     }
 
     stages {
-        stage('Préparation') {
+        stage('Preparation') {
             steps {
                 script {
-                    echo "🚀 Démarrage du pipeline de test"
-                    echo "⚙️ Configuration de l'environnement..."
+                    echo "🚀 Starting the test pipeline"
+                    echo "⚙️ Setting up the environment..."
                 }
+
                 checkout scm
 
-                // Preparing directories
                 sh """
                     mkdir -p $CYPRESS_CACHE_FOLDER
                     mkdir -p ${REPORT_DIR}/{json,html,pdf,junit}
@@ -39,7 +38,7 @@ pipeline {
         stage('Installation') {
             steps {
                 script {
-                    echo "📦 Installation des dépendances..."
+                    echo "📦 Installing dependencies..."
                 }
 
                 sh '''
@@ -53,19 +52,19 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "🧪 Exécution des tests Cypress..."
+                        echo "🧪 Running Cypress tests..."
 
-                        // Running Cypress tests without verbose logging
+                        // Run the tests
                         sh """
                             npx cypress run \
                             --browser electron \
                             --headless \
                             --reporter mochawesome \
                             --reporter-options configFile=reporter-config.json \
-                            --no-color 2>&1 | tee cypress-output.txt
+                            2>&1 | tee cypress-output.txt
                         """
 
-                        // Create PDF report script
+                        // Create the PDF report script
                         writeFile file: 'createReport.js', text: """
                             const fs = require('fs');
                             const { jsPDF } = require('jspdf');
@@ -78,11 +77,11 @@ pipeline {
                                 // Title page
                                 doc.setFontSize(28);
                                 doc.setTextColor(44, 62, 80);
-                                doc.text('Rapport de Tests', 20, 30);
+                                doc.text('Test Report', 20, 30);
                                 doc.setFontSize(24);
                                 doc.text('France Culture', 20, 45);
 
-                                // Build information box
+                                // Info box
                                 doc.setDrawColor(52, 152, 219);
                                 doc.setFillColor(240, 248, 255);
                                 doc.roundedRect(20, 60, 170, 50, 3, 3, 'FD');
@@ -92,16 +91,16 @@ pipeline {
                                 const buildInfo = [
                                     'Date: ${TIMESTAMP}',
                                     'Commit: ${GIT_COMMIT_MSG}',
-                                    'Auteur: ${GIT_AUTHOR}'
+                                    'Author: ${GIT_AUTHOR}'
                                 ];
                                 doc.text(buildInfo, 25, 70);
 
                                 // Test summary
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
-                                doc.text('Résumé des Tests', 20, 130);
+                                doc.text('Test Summary', 20, 130);
 
-                                // Stat boxes
+                                // Status boxes
                                 function drawStatBox(text, value, x, y, color) {
                                     doc.setDrawColor(color[0], color[1], color[2]);
                                     doc.setFillColor(255, 255, 255);
@@ -113,16 +112,16 @@ pipeline {
                                     doc.setFontSize(14);
                                 }
 
-                                drawStatBox('Tests Total', report.stats.tests, 20, 140, [52, 73, 94]);
-                                drawStatBox('Réussis', report.stats.passes, 110, 140, [46, 204, 113]);
-                                drawStatBox('Échoués', report.stats.failures, 20, 180, [231, 76, 60]);
-                                drawStatBox('Durée', Math.round(report.stats.duration/1000) + 's', 110, 180, [52, 152, 219]);
+                                drawStatBox('Total Tests', report.stats.tests, 20, 140, [52, 73, 94]);
+                                drawStatBox('Passed', report.stats.passes, 110, 140, [46, 204, 113]);
+                                drawStatBox('Failed', report.stats.failures, 20, 180, [231, 76, 60]);
+                                drawStatBox('Duration', Math.round(report.stats.duration/1000) + 's', 110, 180, [52, 152, 219]);
 
-                                // Test details page
+                                // Test details
                                 doc.addPage();
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
-                                doc.text('Détails des Tests', 20, 20);
+                                doc.text('Test Details', 20, 20);
 
                                 let yPos = 40;
                                 report.results[0].suites[0].tests.forEach(test => {
@@ -157,11 +156,11 @@ pipeline {
                                     yPos += 10;
                                 });
 
-                                // Logs page
+                                // Execution logs
                                 doc.addPage();
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
-                                doc.text('Journal d\\'Exécution', 20, 20);
+                                doc.text('Execution Logs', 20, 20);
 
                                 const logs = testOutput.split('\\n')
                                     .filter(line => line.includes('CYPRESS_LOG:'))
@@ -186,7 +185,7 @@ pipeline {
                             }
                         """
 
-                        // Create the PDF report
+                        // Generate the PDF report
                         sh 'node createReport.js'
                         
                     } catch (Exception e) {
@@ -216,19 +215,19 @@ pipeline {
         }
         success {
             echo """
-                ✅ Bilan des Tests:
-                - Statut: RÉUSSI
-                - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Rapport PDF: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
-                - Vidéos: cypress/videos
+                ✅ Test Summary:
+                - Status: SUCCESS
+                - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                - PDF Report: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
+                - Videos: cypress/videos
             """
         }
         failure {
             echo """
-                ❌ Bilan des Tests:
-                - Statut: ÉCHOUÉ
-                - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Consultez le rapport pour plus de détails
+                ❌ Test Summary:
+                - Status: FAILED
+                - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                - Check the report for more details
             """
         }
         cleanup {
