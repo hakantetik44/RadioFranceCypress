@@ -1,4 +1,3 @@
-
 pipeline {
     agent any
     
@@ -12,7 +11,6 @@ pipeline {
         TIMESTAMP = new Date().format('yyyy-MM-dd_HH-mm-ss')
         GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
         GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
-        BUILD_USER = currentBuild.getBuildCauses()[0].userId
     }
     
     stages {
@@ -62,7 +60,7 @@ pipeline {
                             2>&1 | tee cypress-output.txt
                         """
 
-                        // PDF rapor oluşturma scripti
+                        // PDF rapor script'ini oluştur
                         writeFile file: 'createReport.js', text: """
                             const fs = require('fs');
                             const { jsPDF } = require('jspdf');
@@ -86,24 +84,18 @@ pipeline {
                                 
                                 doc.setFontSize(12);
                                 doc.setTextColor(0, 0, 0);
-                                doc.text([
-                                    'Build: #${BUILD_NUMBER}',
+                                const buildInfo = [
                                     'Date: ${TIMESTAMP}',
                                     'Commit: ${GIT_COMMIT_MSG}',
-                                    'Auteur: ${GIT_AUTHOR}',
-                                    'Exécuté par: ${BUILD_USER}'
-                                ], 25, 70);
+                                    'Auteur: ${GIT_AUTHOR}'
+                                ];
+                                doc.text(buildInfo, 25, 70);
 
                                 // Test Özeti
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
                                 doc.text('Résumé des Tests', 20, 130);
 
-                                // Özet Kutusu
-                                const passRate = (report.stats.passes / report.stats.tests) * 100;
-                                doc.setFontSize(14);
-                                doc.setTextColor(0, 0, 0);
-                                
                                 // İstatistik kutuları
                                 function drawStatBox(text, value, x, y, color) {
                                     doc.setDrawColor(color[0], color[1], color[2]);
@@ -139,7 +131,6 @@ pipeline {
                                     const color = isPassed ? [46, 204, 113] : [231, 76, 60];
                                     
                                     doc.setTextColor(...color);
-                                    doc.setFontSize(14);
                                     doc.text(icon, 20, yPos);
 
                                     doc.setTextColor(0, 0, 0);
@@ -161,13 +152,13 @@ pipeline {
                                     yPos += 10;
                                 });
 
-                                // Log Sayfası
+                                // Loglar
                                 doc.addPage();
                                 doc.setFontSize(20);
                                 doc.setTextColor(41, 128, 185);
                                 doc.text('Journal d\\'Exécution', 20, 20);
 
-                                const logs = testOutput.split('\\n')
+                                const logs = testOutput.split('\\\\n')
                                     .filter(line => line.includes('CYPRESS_LOG:'))
                                     .map(line => line.replace('CYPRESS_LOG:', '').trim());
 
@@ -194,12 +185,11 @@ pipeline {
                                 });
 
                                 // Alt Bilgi
-                                const pageCount = doc.getNumberOfPages();
-                                for (let i = 1; i <= pageCount; i++) {
+                                for (let i = 1; i <= doc.getNumberOfPages(); i++) {
                                     doc.setPage(i);
                                     doc.setFontSize(8);
                                     doc.setTextColor(128, 128, 128);
-                                    doc.text('Page ' + i + ' / ' + pageCount, 20, 285);
+                                    doc.text('Page ' + i + ' / ' + doc.getNumberOfPages(), 20, 285);
                                     doc.text('Radio France - Tests Automatisés', 85, 285);
                                     doc.text('${TIMESTAMP}', 170, 285);
                                 }
@@ -213,7 +203,7 @@ pipeline {
                             }
                         """
 
-                        // PDF raporu oluştur
+                        // PDF raporunu oluştur
                         sh 'node createReport.js'
                         
                     } catch (Exception e) {
@@ -263,4 +253,3 @@ pipeline {
         }
     }
 }
-```
