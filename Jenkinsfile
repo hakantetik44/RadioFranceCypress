@@ -34,13 +34,27 @@ pipeline {
                     try {
                         echo "Démarrage des Tests Cypress..."
                         
-                        // Cypress testlerini çalıştır ve çıktıyı işleme
-                        sh '''
-                            CYPRESS_NO_COMMAND_LOG=1 npx cypress run \
-                            --browser electron \
-                            --headless \
-                            --config defaultCommandTimeout=60000
-                        '''
+                        // Test çıktısını al ve işle
+                        def testOutput = sh(
+                            script: '''
+                                npx cypress run \
+                                --browser electron \
+                                --headless \
+                                --config defaultCommandTimeout=60000 | grep "CYPRESS_LOG:"
+                            ''',
+                            returnStdout: true
+                        ).trim()
+
+                        // Log mesajlarını topla
+                        def logMessages = testOutput.split('\n')
+                            .findAll { it.contains('CYPRESS_LOG:') }
+                            .collect { it.replace('CYPRESS_LOG:', '').trim() }
+
+                        // Test sonuçlarını yazdır
+                        echo "=== Résultats des Tests ==="
+                        logMessages.each { message ->
+                            echo "→ ${message}"
+                        }
                         
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
