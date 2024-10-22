@@ -1,12 +1,23 @@
-{
-  "reporterEnabled": "spec, mocha-junit-reporter, mochawesome",
-  "mochaJunitReporterReporterOptions": {
-      "mochaFile": "cypress/reports/junit/results-[hash].xml"
+const { defineConfig } = require('cypress')
+
+module.exports = defineConfig({
+  e2e: {
+    setupNodeEvents(on, config) {
+      on('task', {
+        log(message) {
+          console.log(`CYPRESS_LOG: ${message}`)
+          return null
+        },
+      })
+    },
+    video: true,
+    videosFolder: 'cypress/videos',
+    screenshotOnRunFailure: true,
+    reporter: 'cypress-multi-reporters',
+    reporterOptions: {
+      configFile: 'reporter-config.json'
+    }
   },
-  "mochawesomeReporterOptions": {
-      "reportDir": "cypress/reports/json",
-      "overwrite": false,
-      "html": false,
-      "json": true
-  }
-}
+  defaultCommandTimeout: 60000,
+  pageLoadTimeout: 60000
+})

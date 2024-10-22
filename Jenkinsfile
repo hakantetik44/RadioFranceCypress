@@ -32,6 +32,7 @@ pipeline {
                 sh '''
                     mkdir -p $CYPRESS_CACHE_FOLDER
                     mkdir -p ${REPORT_DIR}/{json,html,pdf,junit}
+                    mkdir -p cypress/videos cypress/screenshots
                 '''
             }
         }
@@ -42,27 +43,32 @@ pipeline {
                     try {
                         echo "🚀 Démarrage des Tests Cypress..."
                         
-                        // Testleri çalıştır
+                        // Test çalıştırma ve log kaydetme
                         sh '''
                             npx cypress run \
                             --browser electron \
                             --headless \
                             --config video=true \
                             --reporter cypress-multi-reporters \
-                            --reporter-options configFile=reporter-config.json | grep "CYPRESS_LOG:" > cypress-output.log
+                            --reporter-options configFile=reporter-config.json \
+                            2>&1 | tee cypress-output.txt
                         '''
 
-                        // Log mesajlarını oku ve göster
-                        def logMessages = readFile('cypress-output.log').split('\n')
-                            .findAll { it.length() > 0 }
-                            .collect { it.replace('CYPRESS_LOG:', '').trim() }
+                        // Logları ayıkla
+                        def testOutput = sh(
+                            script: 'cat cypress-output.txt | grep "CYPRESS_LOG:" || true',
+                            returnStdout: true
+                        ).trim()
 
+                        // Test sonuçlarını göster
                         echo "\n📋 Résultats des Tests:"
-                        logMessages.each { message ->
-                            echo "  ➜ ${message}"
+                        testOutput.split('\n').each { line ->
+                            if (line) {
+                                echo "  ➜ ${line.replace('CYPRESS_LOG:', '').trim()}"
+                            }
                         }
 
-                        // Raporları oluştur
+                        // HTML rapor oluştur
                         sh """
                             if [ -f "${REPORT_DIR}/json/mochawesome.json" ]; then
                                 npx marge "${REPORT_DIR}/json/mochawesome.json" \
@@ -71,30 +77,51 @@ pipeline {
                                     --charts \
                                     --reportTitle "Tests Cypress - France Culture" \
                                     --reportFilename "report_${TIMESTAMP}"
-                                
+                            fi
+                        """
+
+                        // PDF rapor oluştur
+                        sh """
+                            if [ -f "${REPORT_DIR}/json/mochawesome.json" ]; then
                                 node -e '
                                     const fs = require("fs");
                                     const { jsPDF } = require("jspdf");
-                                    const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/json/mochawesome.json", "utf8"));
-                                    
-                                    const doc = new jsPDF();
-                                    doc.setFontSize(16);
-                                    doc.text("Rapport de Tests Cypress - France Culture", 20, 20);
-                                    
-                                    doc.setFontSize(12);
-                                    doc.text([
-                                        "Date: ${TIMESTAMP}",
-                                        "Tests total: " + report.stats.tests,
-                                        "Tests réussis: " + report.stats.passes,
-                                        "Tests échoués: " + report.stats.failures,
-                                        "Durée: " + Math.round(report.stats.duration/1000) + " secondes"
-                                    ], 20, 40);
-                                    
-                                    doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
+                                    try {
+                                        const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/json/mochawesome.json", "utf8"));
+                                        const doc = new jsPDF();
+                                        
+                                        // Başlık
+                                        doc.setFontSize(16);
+                                        doc.text("Rapport de Tests Cypress - France Culture", 20, 20);
+                                        
+                                        // Test özeti
+                                        doc.setFontSize(12);
+                                        doc.text([
+                                            "Date: ${TIMESTAMP}",
+                                            "Tests total: " + report.stats.tests,
+                                            "Tests réussis: " + report.stats.passes,
+                                            "Tests échoués: " + report.stats.failures,
+                                            "Durée: " + Math.round(report.stats.duration/1000) + " secondes"
+                                        ], 20, 40);
+                                        
+                                        // Test detayları
+                                        let y = 80;
+                                        report.results[0].suites.forEach(suite => {
+                                            suite.tests.forEach(test => {
+                                                const status = test.state === "passed" ? "✓" : "✗";
+                                                doc.text(`${status} ${test.title}`, 20, y);
+                                                y += 10;
+                                            });
+                                        });
+                                        
+                                        doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
+                                    } catch (err) {
+                                        console.error("Erreur lors de la création du PDF:", err);
+                                    }
                                 '
                             fi
                         """
-                        
+
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
                         error("❌ Tests Cypress échoués: ${e.message}")
@@ -103,7 +130,7 @@ pipeline {
             }
             post {
                 always {
-                    sh 'rm -f cypress-output.log || true'
+                    sh 'rm -f cypress-output.txt || true'
                 }
             }
         }
@@ -111,11 +138,11 @@ pipeline {
     
     post {
         always {
-            archiveArtifacts artifacts: """
-                ${REPORT_DIR}/**/*,
+            archiveArtifacts artifacts: '''
+                cypress/reports/**/*,
                 cypress/videos/**/*,
                 cypress/screenshots/**/*
-            """, allowEmptyArchive: true
+            ''', allowEmptyArchive: true
         }
         success {
             script {
@@ -123,7 +150,8 @@ pipeline {
                 ✅ Bilan des Tests:
                 - Statut: RÉUSSI
                 - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Rapports disponibles dans: ${REPORT_DIR}
+                - Rapports: ${REPORT_DIR}/{html,pdf}
+                - Videos: cypress/videos
                 """
             }
         }
