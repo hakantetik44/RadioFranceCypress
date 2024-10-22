@@ -31,7 +31,8 @@ pipeline {
             steps {
                 sh '''
                     mkdir -p $CYPRESS_CACHE_FOLDER
-                    mkdir -p ${REPORT_DIR}/{json,html,pdf,junit}
+                    mkdir -p ${REPORT_DIR}/{mocha,html,pdf,junit}
+                    mkdir -p cypress/{videos,screenshots}
                 '''
             }
         }
@@ -44,56 +45,83 @@ pipeline {
                         
                         // Testleri çalıştır
                         sh '''
+                            export CYPRESS_VIDEO=true
+                            export CYPRESS_VIDEO_COMPRESSION=32
                             npx cypress run \
-                            --browser electron \
-                            --headless \
-                            --config video=true \
-                            --reporter cypress-multi-reporters \
-                            --reporter-options configFile=reporter-config.json | grep "CYPRESS_LOG:" > cypress-output.log
+                                --browser electron \
+                                --headless \
+                                --reporter cypress-multi-reporters \
+                                --reporter-options configFile=reporter-config.json | tee test-output.log
                         '''
 
-                        // Log mesajlarını oku ve göster
-                        def logMessages = readFile('cypress-output.log').split('\n')
-                            .findAll { it.length() > 0 }
-                            .collect { it.replace('CYPRESS_LOG:', '').trim() }
+                        // Log mesajlarını oku
+                        def testLogs = sh(script: "grep 'CYPRESS_LOG:' test-output.log || true", returnStdout: true).trim()
+                        
+                        // Mochawesome raporlarını birleştir
+                        sh '''
+                            npx mochawesome-merge "${REPORT_DIR}/mocha/*.json" > "${REPORT_DIR}/mochawesome_merged.json"
+                            npx marge "${REPORT_DIR}/mochawesome_merged.json" \
+                                --reportDir "${REPORT_DIR}/html" \
+                                --inline \
+                                --charts \
+                                --reportTitle "Tests Cypress - France Culture" \
+                                --reportFilename "report_${TIMESTAMP}"
+                        '''
 
-                        echo "\n📋 Résultats des Tests:"
-                        logMessages.each { message ->
-                            echo "  ➜ ${message}"
-                        }
-
-                        // Raporları oluştur
+                        // PDF rapor oluştur
                         sh """
-                            if [ -f "${REPORT_DIR}/json/mochawesome.json" ]; then
-                                npx marge "${REPORT_DIR}/json/mochawesome.json" \
-                                    --reportDir "${REPORT_DIR}/html" \
-                                    --inline \
-                                    --charts \
-                                    --reportTitle "Tests Cypress - France Culture" \
-                                    --reportFilename "report_${TIMESTAMP}"
+                            node -e '
+                                const fs = require("fs");
+                                const { jsPDF } = require("jspdf");
+                                const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/mochawesome_merged.json", "utf8"));
                                 
-                                node -e '
-                                    const fs = require("fs");
-                                    const { jsPDF } = require("jspdf");
-                                    const report = JSON.parse(fs.readFileSync("${REPORT_DIR}/json/mochawesome.json", "utf8"));
-                                    
-                                    const doc = new jsPDF();
-                                    doc.setFontSize(16);
-                                    doc.text("Rapport de Tests Cypress - France Culture", 20, 20);
-                                    
-                                    doc.setFontSize(12);
-                                    doc.text([
-                                        "Date: ${TIMESTAMP}",
-                                        "Tests total: " + report.stats.tests,
-                                        "Tests réussis: " + report.stats.passes,
-                                        "Tests échoués: " + report.stats.failures,
-                                        "Durée: " + Math.round(report.stats.duration/1000) + " secondes"
-                                    ], 20, 40);
-                                    
-                                    doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
-                                '
-                            fi
+                                const doc = new jsPDF();
+                                doc.setFontSize(16);
+                                doc.text("Rapport de Tests Cypress - France Culture", 20, 20);
+                                
+                                doc.setFontSize(12);
+                                let y = 40;
+                                
+                                // Test özeti
+                                doc.text([
+                                    "Date: ${TIMESTAMP}",
+                                    "Tests total: " + report.stats.tests,
+                                    "Tests réussis: " + report.stats.passes,
+                                    "Tests échoués: " + report.stats.failures,
+                                    "Durée: " + Math.round(report.stats.duration/1000) + " secondes"
+                                ], 20, y);
+                                
+                                y += 40;
+                                
+                                // Test detayları
+                                doc.setFontSize(14);
+                                doc.text("Détails des Tests:", 20, y);
+                                
+                                y += 10;
+                                doc.setFontSize(11);
+                                report.results[0].suites[0].tests.forEach(test => {
+                                    y += 10;
+                                    const status = test.pass ? "✓" : "✗";
+                                    doc.text(\`\${status} \${test.title}\`, 25, y);
+                                    if (test.context) {
+                                        y += 5;
+                                        doc.setFontSize(9);
+                                        doc.text(test.context, 30, y);
+                                        doc.setFontSize(11);
+                                    }
+                                });
+                                
+                                doc.save("${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf");
+                            '
                         """
+                        
+                        // Test loglarını göster
+                        echo "\n📋 Résultats des Tests:"
+                        testLogs.split('\n').each { log ->
+                            if (log) {
+                                echo "  ➜ ${log.replace('CYPRESS_LOG:', '').trim()}"
+                            }
+                        }
                         
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
@@ -103,7 +131,7 @@ pipeline {
             }
             post {
                 always {
-                    sh 'rm -f cypress-output.log || true'
+                    sh 'rm -f test-output.log || true'
                 }
             }
         }
@@ -116,6 +144,8 @@ pipeline {
                 cypress/videos/**/*,
                 cypress/screenshots/**/*
             """, allowEmptyArchive: true
+            
+            junit allowEmptyResults: true, testResults: "${REPORT_DIR}/junit/*.xml"
         }
         success {
             script {
@@ -123,7 +153,8 @@ pipeline {
                 ✅ Bilan des Tests:
                 - Statut: RÉUSSI
                 - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Rapports disponibles dans: ${REPORT_DIR}
+                - Rapports disponibles dans: ${REPORT_DIR}/{html,pdf}
+                - Video: cypress/videos
                 """
             }
         }
@@ -133,6 +164,7 @@ pipeline {
                 ❌ Bilan des Tests:
                 - Statut: ÉCHOUÉ
                 - Fin: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                - Consultez les rapports pour plus de détails
                 """
             }
         }

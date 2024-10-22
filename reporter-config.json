@@ -1,12 +1,20 @@
 {
-    "reporterEnabled": "spec, mocha-junit-reporter, mochawesome",
-    "mochaJunitReporterReporterOptions": {
-        "mochaFile": "cypress/reports/junit/results-[hash].xml"
-    },
+    "reporterEnabled": "mochawesome, mocha-junit-reporter",
     "mochawesomeReporterOptions": {
-        "reportDir": "cypress/reports/json",
-        "overwrite": false,
-        "html": false,
-        "json": true
+      "reportDir": "cypress/reports/mocha",
+      "overwrite": false,
+      "html": true,
+      "json": true,
+      "timestamp": true,
+      "charts": true,
+      "embeddedScreenshots": true,
+      "inlineAssets": true,
+      "code": true,
+      "reportTitle": "Tests Cypress - France Culture",
+      "reportPageTitle": "Rapport de Tests - France Culture"
+    },
+    "mochaJunitReporterReporterOptions": {
+      "mochaFile": "cypress/reports/junit/results-[hash].xml",
+      "toConsole": false
     }
-}
+  }
