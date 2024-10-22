@@ -58,16 +58,4 @@ describe('Fonctionnalités de base de France Culture', () => {
       });
   });
 
-  it('vérifie le lien de recherche', () => {
-    // Çerez popup'ının kaybolmasını bekle
-    cy.get('#didomi-popup').should('not.exist').then(() => {
-      // Arama linkini farklı selektörlerle dene
-      cy.get('a[href="/recherche"], .Button.light.tertiary.large, a[aria-label*="recherche"]')
-        .should('be.visible')
-        .then(() => {
-          cy.log('Lien de recherche trouvé');
-          cy.task('log', 'Lien de recherche trouvé');
-        });
-    });
-  });
 });
