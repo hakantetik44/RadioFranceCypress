@@ -42,95 +42,134 @@ pipeline {
                     npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
                 '''
 
-               writeFile file: 'createReport.js', text: '''
-    const fs = require('fs');
-    const { jsPDF } = require('jspdf');
+                writeFile file: 'reporter-config.json', text: '''{
+                    "reporterEnabled": "mochawesome, mocha-junit-reporter",
+                    "mochawesomeReporterOptions": {
+                        "reportDir": "cypress/reports/json",
+                        "overwrite": false,
+                        "html": false,
+                        "json": true
+                    },
+                    "mochaJunitReporterReporterOptions": {
+                        "mochaFile": "cypress/reports/junit/results-[hash].xml",
+                        "toConsole": true
+                    }
+                }'''
+            }
+        }
 
-    try {
-        const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-        const doc = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4'
-        });
+        stage('Tests') {
+            steps {
+                script {
+                    try {
+                        echo "🧪 Running Cypress tests..."
 
-        // Mavi başlık alanı
-        doc.setFillColor(0, 44, 150);  // Koyu mavi
-        doc.rect(0, 0, 210, 35, 'F');
+                        sh '''
+                            npx cypress run \
+                            --browser electron \
+                            --headless \
+                            2>&1 | sed -r "s/\\x1b\\[[0-9;]*m//g" | tee cypress-output.txt
+                        '''
 
-        // Başlık ve tarih - beyaz renkte
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(22);
-        doc.text("Rapport d'Execution des Tests", 20, 22);
+                        sh '''
+                            npx mochawesome-merge "cypress/reports/json/*.json" > "cypress/reports/mochawesome.json"
+                            npx marge "cypress/reports/mochawesome.json" --reportDir "cypress/reports/html" --inline
+                        '''
 
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('fr-FR', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit'
-        }).replace(':', 'h');
+                        writeFile file: 'createReport.js', text: '''
+                            const fs = require('fs');
+                            const { jsPDF } = require('jspdf');
 
-        doc.setFontSize(14);
-        doc.text("Date: " + dateStr, 20, 32);
+                            try {
+                                const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
+                                const doc = new jsPDF({
+                                    orientation: 'portrait',
+                                    unit: 'mm',
+                                    format: 'a4'
+                                });
 
-        // Resume bölümü - açık gri arka plan
-        doc.setFillColor(247, 247, 247);
-        doc.rect(0, 45, 210, 80, 'F');
+                                // Mavi başlık alanı
+                                doc.setFillColor(0, 44, 150);
+                                doc.rect(0, 0, 210, 35, 'F');
 
-        doc.setTextColor(0, 0, 0);
-        doc.setFontSize(18);
-        doc.text("Resume", 20, 65);
+                                // Başlık ve tarih - beyaz renkte
+                                doc.setTextColor(255, 255, 255);
+                                doc.setFontSize(22);
+                                doc.text("Rapport d'Execution des Tests", 20, 22);
 
-        // Test istatistikleri
-        doc.setFontSize(12);
-        doc.text([
-            "Tests Total: " + report.stats.tests,
-            "Tests Passes: " + report.stats.passes,
-            "Tests Echoues: " + (report.stats.failures || 0),
-            "Duree: " + (report.stats.duration / 1000).toFixed(2) + "s"
-        ], 30, 85, { lineHeightFactor: 1.5 });
+                                const now = new Date();
+                                const dateStr = now.toLocaleDateString('fr-FR', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                }).replace(':', 'h');
 
-        // Resultats Detailles bölümü - beyaz arka plan
-        doc.setFontSize(18);
-        doc.text("Resultats Detailles", 20, 145);
+                                doc.setFontSize(14);
+                                doc.text("Date: " + dateStr, 20, 32);
 
-        doc.setFontSize(16);
-        doc.text("Fonctionnalites de base de France Culture", 20, 165);
+                                // Resume bölümü - açık gri arka plan
+                                doc.setFillColor(247, 247, 247);
+                                doc.rect(0, 45, 210, 80, 'F');
 
-        // Journal d'Execution bölümü - açık gri arka plan
-        doc.setFillColor(247, 247, 247);
-        doc.rect(0, 190, 210, 100, 'F');
+                                doc.setTextColor(0, 0, 0);
+                                doc.setFontSize(18);
+                                doc.text("Resume", 20, 65);
 
-        doc.setFontSize(18);
-        doc.text("Journal d'Execution", 20, 210);
+                                // Test istatistikleri
+                                doc.setFontSize(12);
+                                doc.text([
+                                    "Tests Total: " + report.stats.tests,
+                                    "Tests Passes: " + report.stats.passes,
+                                    "Tests Echoues: " + (report.stats.failures || 0),
+                                    "Duree: " + (report.stats.duration / 1000).toFixed(2) + "s"
+                                ], 30, 85, { lineHeightFactor: 1.5 });
 
-        // Log kayıtları
-        doc.setFontSize(11);
-        const logs = [
-            "✓ Page | Chargement reussi",
-            "✓ Cookies | Configuration acceptee",
-            "ℹ Page | France Culture - Ecouter la radio en direct et podcasts gratuitement",
-            "✓ Menu | Principal disponible",
-            "ℹ Menu | 35 elements verifies",
-            "Pas de banniere de cookies detectee",
-            "✓ Recherche | Fonctionnalite disponible"
-        ];
+                                // Resultats Detailles bölümü
+                                doc.setFontSize(18);
+                                doc.text("Resultats Detailles", 20, 145);
 
-        logs.forEach((log, index) => {
-            doc.text(log, 30, 230 + (index * 8));
-        });
+                                doc.setFontSize(16);
+                                doc.text("Fonctionnalites de base de France Culture", 20, 165);
 
-        // PDF'i kaydet
-        doc.save(process.env.REPORT_DIR + "/pdf/report_" + process.env.TIMESTAMP + ".pdf");
+                                // Journal d'Execution bölümü
+                                doc.setFillColor(247, 247, 247);
+                                doc.rect(0, 190, 210, 100, 'F');
 
-    } catch (err) {
-        console.error("Error generating PDF report:", err);
-        process.exit(1);
-    }
-'''
+                                doc.setFontSize(18);
+                                doc.text("Journal d'Execution", 20, 210);
+
+                                // Log kayıtları
+                                doc.setFontSize(11);
+                                const logs = [
+                                    "✓ Page | Chargement reussi",
+                                    "✓ Cookies | Configuration acceptee",
+                                    "ℹ Page | France Culture - Ecouter la radio en direct et podcasts gratuitement",
+                                    "✓ Menu | Principal disponible",
+                                    "ℹ Menu | 35 elements verifies",
+                                    "Pas de banniere de cookies detectee",
+                                    "✓ Recherche | Fonctionnalite disponible"
+                                ];
+
+                                logs.forEach((log, index) => {
+                                    doc.text(log, 30, 230 + (index * 8));
+                                });
+
+                                doc.save(process.env.REPORT_DIR + "/pdf/report_" + process.env.TIMESTAMP + ".pdf");
+
+                            } catch (err) {
+                                console.error("Error generating PDF report:", err);
+                                process.exit(1);
+                            }
+                        '''
+
+                        sh 'node createReport.js'
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        throw e
+                    }
                 }
             }
             post {
