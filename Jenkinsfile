@@ -46,26 +46,18 @@ pipeline {
                     npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
                 '''
 
-                writeFile file: 'reporter-config.json', text: '''{
-                    "reporterEnabled": "mochawesome, mocha-junit-reporter",
-                    "mochawesomeReporterOptions": {
-                        "reportDir": "cypress/reports/json",
-                        "overwrite": false,
-                        "html": false,
-                        "json": true
-                    },
-                    "mochaJunitReporterReporterOptions": {
-                        "mochaFile": "cypress/reports/junit/results-[hash].xml",
-                        "toConsole": true
-                    }
-                }'''
-
                 writeFile file: 'cypress.config.js', text: '''
                     const { defineConfig } = require('cypress')
 
                     module.exports = defineConfig({
                         e2e: {
                             setupNodeEvents(on, config) {
+                                on('task', {
+                                    log(message) {
+                                        console.log(`CYPRESS_LOG: ${message}`)
+                                        return null
+                                    }
+                                })
                                 return config
                             },
                             baseUrl: 'https://www.franceculture.fr',
@@ -87,6 +79,22 @@ pipeline {
                         }
                     })
                 '''
+
+                writeFile file: 'reporter-config.json', text: '''
+                    {
+                        "reporterEnabled": "mochawesome, mocha-junit-reporter",
+                        "mochawesomeReporterOptions": {
+                            "reportDir": "cypress/reports/json",
+                            "overwrite": false,
+                            "html": false,
+                            "json": true
+                        },
+                        "mochaJunitReporterReporterOptions": {
+                            "mochaFile": "cypress/reports/junit/results-[hash].xml",
+                            "toConsole": true
+                        }
+                    }
+                '''
             }
         }
 
@@ -97,10 +105,12 @@ pipeline {
                         echo "🧪 Running Cypress tests..."
 
                         sh '''
+                            export CYPRESS_CACHE_FOLDER=${WORKSPACE}/.cypress-cache
                             CYPRESS_VERIFY_TIMEOUT=120000 npx cypress run \
                             --browser electron \
                             --headless \
                             --config-file cypress.config.js \
+                            --spec "cypress/e2e/RadioFrance.cy.js" \
                             2>&1 | tee cypress-output.txt
                         '''
 
@@ -123,10 +133,7 @@ pipeline {
                                 PRIMARY: [0, 44, 150],    // Koyu mavi
                                 WHITE: [255, 255, 255],
                                 BLACK: [0, 0, 0],
-                                GRAY: [247, 247, 247],
-                                SUCCESS: [46, 165, 74],   // Yeşil
-                                FAILURE: [220, 53, 69],   // Kırmızı
-                                INFO: [75, 75, 75]        // Gri
+                                GRAY: [247, 247, 247]
                             };
 
                             class PDFReport {
@@ -203,24 +210,19 @@ pipeline {
                                     if (results && results.length > 0) {
                                         let yPos = 185;
                                         results[0].tests.forEach((test) => {
-                                            // Test sonuç kutusu
+                                            // Test kutusu
                                             this.setColor(COLORS.WHITE);
                                             this.doc.rect(15, yPos - 5, this.pageWidth - 30, 20, 'F');
                                             this.doc.setDrawColor(...COLORS.GRAY);
                                             this.doc.rect(15, yPos - 5, this.pageWidth - 30, 20, 'D');
 
-                                            // Test durumu
-                                            this.setColor(test.pass ? COLORS.SUCCESS : COLORS.FAILURE, 'text');
-                                            this.doc.text(test.pass ? "✓" : "✗", 20, yPos + 5);
-
-                                            // Test başlığı ve süresi
+                                            // Test sonucu ve başlığı
                                             this.setColor(COLORS.BLACK, 'text');
                                             this.doc.setFontSize(11);
-                                            this.doc.text(test.title, 30, yPos + 5);
-                                            this.doc.text("Durée: " + (test.duration / 1000).toFixed(2) + "s", 30, yPos + 12);
+                                            this.doc.text((test.pass ? "✓" : "✗") + " " + test.title, 20, yPos + 5);
+                                            this.doc.text("Durée: " + (test.duration / 1000).toFixed(2) + "s", 20, yPos + 12);
 
                                             yPos += 25;
-                                            
                                             if (yPos > 250) {
                                                 this.doc.addPage();
                                                 yPos = 30;
@@ -229,39 +231,11 @@ pipeline {
                                     }
                                 }
 
-                                createJournalSection() {
-                                    // Gri arka plan
-                                    this.setColor(COLORS.GRAY);
-                                    this.doc.rect(0, 190, this.pageWidth, 100, 'F');
-
-                                    // Başlık
-                                    this.setColor(COLORS.BLACK, 'text');
-                                    this.doc.setFontSize(18);
-                                    this.doc.text("Journal d'Execution", this.margin, 210);
-
-                                    // Log kayıtları
-                                    const logs = [
-                                        "✓ Page | Chargement reussi",
-                                        "✓ Cookies | Configuration acceptee",
-                                        "ℹ Page | France Culture - Ecouter la radio en direct et podcasts gratuitement",
-                                        "✓ Menu | Principal disponible",
-                                        "ℹ Menu | 35 elements verifies",
-                                        "Pas de banniere de cookies detectee",
-                                        "✓ Recherche | Fonctionnalite disponible"
-                                    ];
-
-                                    this.doc.setFontSize(11);
-                                    logs.forEach((log, index) => {
-                                        this.doc.text(log, 30, 230 + (index * 8));
-                                    });
-                                }
-
                                 generate(reportData) {
                                     try {
                                         this.createHeader();
                                         this.createResumeSection(reportData.stats);
                                         this.createResultsSection(reportData.results);
-                                        this.createJournalSection();
                                         
                                         this.doc.save(`${process.env.REPORT_DIR}/pdf/report_${process.env.TIMESTAMP}.pdf`);
                                     } catch (error) {
