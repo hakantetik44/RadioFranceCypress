@@ -139,22 +139,21 @@ pipeline {
                                     <div class="results">
                                         <h2>🔍 Résultats Détaillés</h2>
                                         ${report.results.map(suite => 
-                                            <div class="suite">
+                                            `<div class="suite">
                                                 <h3>${suite.title}</h3>
                                                 ${suite.tests.map(test => 
-                                                    <div class="test">
+                                                    `<div class="test">
                                                         <p>${test.status} ${test.title}</p>
                                                         <p>Durée: ${test.duration}s</p>
-                                                        ${test.error ? <p style="color: red">Erreur: ${test.error}</p> : ''}
-                                                    </div>
-                                                ).join('')}
-                                            </div>
+                                                        ${test.error ? `<p style="color: red">Erreur: ${test.error}</p>` : ''}
+                                                    </div>`).join('')}
+                                            </div>`
                                         ).join('')}
                                     </div>
 
                                     <div class="logs">
                                         <h2>📝 Journal d'Exécution</h2>
-                                        ${uniqueLogs.map(log => <p>${log}</p>).join('')}
+                                        ${uniqueLogs.map(log => `<p>${log}</p>`).join('')}
                                     </div>
                                 </body>
                                 </html>
@@ -197,21 +196,21 @@ pipeline {
 
                             VERIFY_TIMEOUT=120000 npx cypress verify
 
-                            CYPRESS_VERIFY_TIMEOUT=120000 \\
-                            npx cypress run \\
-                                --browser electron \\
-                                --headless \\
-                                --config video=true \\
-                                --reporter cypress-multi-reporters \\
+                            CYPRESS_VERIFY_TIMEOUT=120000 \
+                            npx cypress run \
+                                --browser electron \
+                                --headless \
+                                --config video=true \
+                                --reporter cypress-multi-reporters \
                                 --reporter-options configFile=reporter-config.json
 
                             # Generate reports
                             npx mochawesome-merge "${REPORT_DIR}/json/*.json" > "${REPORT_DIR}/mochawesome.json"
-                            npx marge \\
-                                "${REPORT_DIR}/mochawesome.json" \\
-                                --reportDir "${REPORT_DIR}/html" \\
-                                --inline \\
-                                --charts \\
+                            npx marge \
+                                "${REPORT_DIR}/mochawesome.json" \
+                                --reportDir "${REPORT_DIR}/html" \
+                                --inline \
+                                --charts \
                                 --title "France Culture Test Results"
 
                             # Generate PDF report
