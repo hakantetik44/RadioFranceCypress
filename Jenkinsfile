@@ -78,7 +78,7 @@ pipeline {
                             npx marge "cypress/reports/mochawesome.json" --reportDir "cypress/reports/html" --inline
                         '''
 
-                        // Generate Simple PDF Report
+                        // Generate Professional PDF Report
                         writeFile file: 'createReport.js', text: '''
                             const fs = require('fs');
                             const { jsPDF } = require('jspdf');
@@ -87,36 +87,113 @@ pipeline {
                                 const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
                                 const doc = new jsPDF();
 
-                                // Header - Blue background
-                                doc.setFillColor(18, 60, 150);
-                                doc.rect(0, 0, 220, 40, 'F');
+                                // Başlık bölümü - Koyu mavi arka plan
+                                doc.setFillColor(25, 59, 150);  // Koyu mavi
+                                doc.rect(0, 0, 220, 45, 'F');
 
-                                // Title - White text
+                                // Logo ve başlık metni - beyaz renk
                                 doc.setTextColor(255, 255, 255);
-                                doc.setFontSize(24);
-                                doc.text('Rapport de Tests', 20, 28);
+                                doc.setFontSize(28);
+                                doc.text('Rapport de Tests', 20, 30);
 
-                                // Subtitle - Black text
+                                // Alt başlık - siyah renk
                                 doc.setTextColor(0, 0, 0);
-                                doc.setFontSize(18);
-                                doc.text('France Culture - Suite de Tests', 20, 55);
+                                doc.setFontSize(20);
+                                doc.text('France Culture - Suite de Tests', 20, 65);
 
-                                // Build Information Box - Light gray background
-                                doc.setFillColor(245, 245, 245);
-                                doc.rect(15, 70, 180, 50, 'F');
+                                // Build bilgileri kutusu - açık gri arka plan
+                                doc.setFillColor(242, 242, 242);
+                                doc.rect(15, 80, 180, 45, 'F');
 
-                                // Build Information - Black text
                                 doc.setFontSize(12);
-                                doc.text('Informations de Build:', 20, 85);
-                                
-                                const timestamp = process.env.TIMESTAMP.replace(/_/g, ' ').replace(/-/g, '/');
+                                doc.text('Informations de Build:', 20, 95);
+
+                                // Build detayları
+                                const timeStr = process.env.TIMESTAMP.replace(/_/g, ' ').replace(/-/g, '/');
+                                doc.setFontSize(11);
                                 doc.text([
-                                    `Date d'exécution: ${timestamp}`,
+                                    `Date d'exécution: ${timeStr}`,
                                     `Message de Commit: ${process.env.GIT_COMMIT_MSG}`,
                                     `Auteur: ${process.env.GIT_AUTHOR}`
-                                ], 20, 100);
+                                ], 25, 110);
 
-                                // Save the PDF
+                                // Test özeti kutuları
+                                doc.addPage();
+                                
+                                // Sayfa başlığı
+                                doc.setFillColor(25, 59, 150);
+                                doc.rect(0, 0, 220, 25, 'F');
+                                doc.setTextColor(255, 255, 255);
+                                doc.setFontSize(18);
+                                doc.text('Résumé', 20, 17);
+
+                                // Test özet kutuları için fonksiyon
+                                const createBox = (x, y, width, height, title, value, color) => {
+                                    doc.setFillColor(...color);
+                                    doc.rect(x, y, width, height, 'F');
+                                    doc.setTextColor(255, 255, 255);
+                                    doc.setFontSize(14);
+                                    doc.text(title, x + 10, y + 20);
+                                    doc.setFontSize(20);
+                                    doc.text(value.toString(), x + 10, y + 45);
+                                };
+
+                                // Özet kutuları
+                                const boxWidth = 85;
+                                const boxHeight = 60;
+                                const startY = 40;
+
+                                createBox(20, startY, boxWidth, boxHeight, 'Tests Total', report.stats.tests, [25, 59, 150]);  // Mavi
+                                createBox(115, startY, boxWidth, boxHeight, 'Tests Passés', report.stats.passes, [46, 165, 74]);  // Yeşil
+                                createBox(20, startY + 70, boxWidth, boxHeight, 'Tests Échoués', report.stats.failures || 0, [220, 53, 69]);  // Kırmızı
+                                createBox(115, startY + 70, boxWidth, boxHeight, 'Durée', `${Math.round(report.stats.duration/1000)}s`, [75, 75, 75]);  // Gri
+
+                                // Sonuçlar sayfası
+                                doc.addPage();
+                                
+                                // Sonuçlar başlığı
+                                doc.setFillColor(25, 59, 150);
+                                doc.rect(0, 0, 220, 25, 'F');
+                                doc.setTextColor(255, 255, 255);
+                                doc.text('Résultats Détaillés', 20, 17);
+
+                                // Test detayları
+                                let yPos = 40;
+                                doc.setTextColor(0, 0, 0);
+
+                                if (report.results && report.results.length > 0) {
+                                    report.results.forEach((suite) => {
+                                        // Test suite başlığı
+                                        doc.setFontSize(14);
+                                        doc.text(suite.title || 'Test Suite', 20, yPos);
+                                        yPos += 10;
+
+                                        if (suite.tests) {
+                                            suite.tests.forEach((test) => {
+                                                const icon = test.pass ? '✓' : '✕';
+                                                const textColor = test.pass ? [46, 165, 74] : [220, 53, 69];
+
+                                                doc.setTextColor(...textColor);
+                                                doc.setFontSize(12);
+                                                doc.text(icon, 25, yPos);
+
+                                                doc.setTextColor(0, 0, 0);
+                                                doc.text(test.title, 35, yPos);
+                                                doc.text(`${test.duration}ms`, 160, yPos);
+
+                                                yPos += 8;
+
+                                                if (yPos > 270) {
+                                                    doc.addPage();
+                                                    yPos = 20;
+                                                }
+                                            });
+                                        }
+                                        yPos += 10;
+                                    });
+                                }
+
+                                // PDF'i kaydet
                                 doc.save(`${process.env.REPORT_DIR}/pdf/report_${process.env.TIMESTAMP}.pdf`);
                                 
                             } catch (err) {
