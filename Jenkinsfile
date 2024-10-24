@@ -270,7 +270,7 @@ stage('Generate PDF Report') {
             }
         }
     }
-}
+
 
 
     post {
@@ -307,5 +307,4 @@ stage('Generate PDF Report') {
             cleanWs()
         }
     }
-}
 }
