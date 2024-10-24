@@ -102,98 +102,167 @@ pipeline {
                         '''
 
                         writeFile file: 'createReport.js', text: '''
-                            const fs = require('fs');
-                            const { jsPDF } = require('jspdf');
+const fs = require('fs');
+const { jsPDF } = require('jspdf');
 
-                            try {
-                                const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-                                const doc = new jsPDF({
-                                    orientation: 'portrait',
-                                    unit: 'mm',
-                                    format: 'a4'
-                                });
+// Sabit renkler ve stiller
+const COLORS = {
+    primary: [0, 57, 166],    // Mavi
+    white: [255, 255, 255],
+    black: [0, 0, 0],
+    gray: [247, 247, 247],
+    success: [46, 184, 46],   // Yeşil
+    info: [41, 128, 185],     // Açık mavi
+    warning: [241, 196, 15],  // Sarı
+    text: [74, 85, 104],      // Koyu gri
+    border: [229, 231, 235]   // Açık gri
+};
 
-                                // Başlık bölümü (Mavi)
-                                doc.setFillColor(0, 57, 166);
-                                doc.rect(0, 0, 210, 40, 'F');
+try {
+    const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
+    const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+    });
 
-                                doc.setTextColor(255, 255, 255);
-                                doc.setFontSize(24);
-                                doc.text("Rapport d'Execution des Tests", 15, 25);
+    // Header section
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(0, 0, 210, 45, 'F');
 
-                                // Tarih
-                                const now = new Date();
-                                const dateStr = now.toLocaleDateString('fr-FR', {
-                                    weekday: 'long',
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                });
-                                doc.setFontSize(14);
-                                doc.text("Date: " + dateStr.replace(':', 'h'), 15, 35);
+    // Title and logo space
+    doc.setTextColor(...COLORS.white);
+    doc.setFontSize(28);
+    doc.text("Rapport d'Execution", 20, 25);
+    doc.setFontSize(20);
+    doc.text("des Tests", 20, 35);
 
-                                // Resume Section
-                                doc.setFillColor(247, 247, 247);
-                                doc.rect(0, 45, 210, 70, 'F');
+    // Date
+    const dateStr = new Date().toLocaleDateString('fr-FR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    }).replace(':', 'h');
+    doc.setFontSize(12);
+    doc.text(dateStr, 130, 25);
 
-                                doc.setTextColor(0, 0, 0);
-                                doc.setFontSize(18);
-                                doc.text("Resume", 15, 65);
+    // Summary boxes section
+    const boxWidth = 40;
+    const boxMargin = 15;
+    let startX = 20;
+    const startY = 55;
 
-                                doc.setFontSize(14);
-                                const stats = [
-                                    `Tests Total: ${report.stats.tests}`,
-                                    `Tests Passes: ${report.stats.passes}`,
-                                    `Tests Echoues: ${report.stats.failures || 0}`,
-                                    `Duree: ${(report.stats.duration / 1000).toFixed(2)}s`
-                                ];
+    // Function to create metric box
+    const createMetricBox = (title, value, color, x, y) => {
+        doc.setFillColor(...color);
+        doc.roundedRect(x, y, boxWidth, 35, 3, 3, 'F');
+        doc.setTextColor(...COLORS.white);
+        doc.setFontSize(10);
+        doc.text(title, x + 5, y + 8);
+        doc.setFontSize(16);
+        doc.text(value.toString(), x + 5, y + 25);
+    };
 
-                                stats.forEach((text, index) => {
-                                    doc.text(text, 25, 85 + (index * 12));
-                                });
+    // Create metric boxes
+    createMetricBox('TOTAL', report.stats.tests, COLORS.primary, startX, startY);
+    createMetricBox('PASSÉS', report.stats.passes, COLORS.success, startX + boxWidth + boxMargin, startY);
+    createMetricBox('ÉCHOUÉS', report.stats.failures || 0, [220, 53, 69], startX + (boxWidth + boxMargin) * 2, startY);
+    createMetricBox('DURÉE', Math.round(report.stats.duration/1000) + 's', COLORS.info, startX + (boxWidth + boxMargin) * 3, startY);
 
-                                // Resultats Detailles Section
-                                doc.setFontSize(18);
-                                doc.text("Resultats Detailles", 15, 140);
+    // Test details section
+    doc.setTextColor(...COLORS.black);
+    doc.setFontSize(18);
+    doc.text("Résultats Détaillés", 20, 110);
 
-                                doc.setFontSize(16);
-                                doc.text("Fonctionnalites de base de France Culture", 15, 160);
+    let yPos = 125;
 
-                                // Test Results
-                                let yPos = 180;
-                                if (report.results && report.results.length > 0) {
-                                    report.results[0].tests.forEach((test) => {
-                                        doc.setFillColor(255, 255, 255);
-                                        doc.rect(15, yPos - 5, 180, 25, 'F');
-                                        doc.setDrawColor(220, 220, 220);
-                                        doc.rect(15, yPos - 5, 180, 25, 'D');
+    // Function to create status badge
+    const createStatusBadge = (status, x, y) => {
+        const color = status ? COLORS.success : [220, 53, 69];
+        const text = status ? '✓' : '✕';
+        doc.setFillColor(...color);
+        doc.circle(x, y, 3, 'F');
+        doc.setTextColor(...color);
+        doc.setFontSize(12);
+        doc.text(text, x - 1.5, y + 1);
+    };
 
-                                        doc.setTextColor(46, 184, 46);
-                                        doc.setFontSize(12);
-                                        doc.text("✓", 20, yPos + 8);
+    // Test results with better styling
+    if (report.results && report.results.length > 0) {
+        report.results[0].tests.forEach((test) => {
+            // Background
+            doc.setFillColor(...COLORS.gray);
+            doc.roundedRect(15, yPos - 5, 180, 30, 2, 2, 'F');
 
-                                        doc.setTextColor(0, 0, 0);
-                                        doc.text(test.title, 35, yPos + 8);
-                                        doc.text(`Durée: ${(test.duration / 1000).toFixed(2)}s`, 35, yPos + 18);
+            // Status and title
+            createStatusBadge(test.pass, 25, yPos + 5);
+            doc.setTextColor(...COLORS.black);
+            doc.setFontSize(11);
+            doc.text(test.title, 35, yPos + 5);
 
-                                        yPos += 35;
-                                        if (yPos > 250) {
-                                            doc.addPage();
-                                            yPos = 30;
-                                        }
-                                    });
-                                }
+            // Duration and details
+            doc.setTextColor(...COLORS.text);
+            doc.setFontSize(10);
+            doc.text(`Durée: ${(test.duration / 1000).toFixed(2)}s`, 35, yPos + 15);
 
-                                // Save PDF
-                                doc.save(`${process.env.REPORT_DIR}/pdf/report_${process.env.TIMESTAMP}.pdf`);
+            const testState = test.pass ? 'SUCCÈS' : 'ÉCHEC';
+            doc.setTextColor(test.pass ? COLORS.success[0] : [220, 53, 69][0]);
+            doc.text(testState, 160, yPos + 5);
 
-                            } catch (err) {
-                                console.error('Error generating PDF report:', err);
-                                process.exit(1);
-                            }
-                        '''
+            yPos += 35;
+
+            if (yPos > 250) {
+                doc.addPage();
+                yPos = 30;
+            }
+        });
+    }
+
+    // Execution log section
+    doc.addPage();
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(0, 0, 210, 25, 'F');
+    doc.setTextColor(...COLORS.white);
+    doc.setFontSize(18);
+    doc.text("Journal d'Exécution", 20, 17);
+
+    // Get logs from test results
+    yPos = 40;
+    const logs = Array.from(new Set(
+        report.results[0].tests.flatMap(test => 
+            test.context ? JSON.parse(test.context).CYPRESS_LOG || [] : []
+        )
+    ));
+
+    logs.forEach((log, index) => {
+        doc.setFillColor(...COLORS.gray);
+        doc.roundedRect(15, yPos - 5, 180, 20, 2, 2, 'F');
+        
+        if (log.includes('SUCCESS') || log.includes('PASSED')) {
+            doc.setTextColor(...COLORS.success);
+            doc.text('✓', 20, yPos + 5);
+        } else if (log.includes('INFO')) {
+            doc.setTextColor(...COLORS.info);
+            doc.text('ℹ', 20, yPos + 5);
+        }
+        
+        doc.setTextColor(...COLORS.black);
+        doc.setFontSize(10);
+        doc.text(log, 30, yPos + 5);
+        yPos += 25;
+    });
+
+    // Save PDF
+    doc.save(`${process.env.REPORT_DIR}/pdf/report_${process.env.TIMESTAMP}.pdf`);
+
+} catch (err) {
+    console.error('Error generating PDF report:', err);
+    process.exit(1);
+}
+'''
 
                         sh 'node createReport.js'
 
