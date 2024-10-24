@@ -198,7 +198,7 @@ pipeline {
 
                             CYPRESS_VERIFY_TIMEOUT=120000 \
                             npx cypress run \
-                                --browser electron \
+                                --browser chrome \
                                 --headless \
                                 --config video=true \
                                 --reporter cypress-multi-reporters \
