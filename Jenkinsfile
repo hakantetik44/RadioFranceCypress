@@ -8,9 +8,6 @@ pipeline {
     environment {
         CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
         REPORT_DIR = "cypress/reports"
-        TIMESTAMP = new Date().format('yyyy-MM-dd_HH-mm-ss')
-        GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
-        GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
         TEST_HISTORY_DIR = "${WORKSPACE}/test-history"
     }
 
@@ -73,12 +70,9 @@ pipeline {
                     async function generatePDF() {
                         try {
                             const testResults = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-                            
-                            // Check if the log file exists before reading
+
                             const logFilePath = 'cypress/logs/test-execution.log';
-                            const logs = fs.existsSync(logFilePath) ? fs.readFileSync(logFilePath, 'utf8')
-                                .split('\\n')
-                                .filter(line => line.trim()) : []; // If the log doesn't exist, use an empty array
+                            const logs = fs.existsSync(logFilePath) ? fs.readFileSync(logFilePath, 'utf8').split('\\n').filter(line => line.trim()) : [];
 
                             const uniqueLogs = [...new Set(logs)];
                             const report = createReport(testResults);
@@ -172,7 +166,7 @@ pipeline {
 
                     async function savePDF(htmlContent) {
                         const browser = await puppeteer.launch({
-                            args: ['--no-sandbox', '--disable-setuid-sandbox']
+                            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--headless'] // Ensure headless mode
                         });
                         const page = await browser.newPage();
                         await page.setContent(htmlContent);
@@ -207,7 +201,7 @@ pipeline {
                                 --headless \
                                 --config video=true \
                                 --reporter cypress-multi-reporters \
-                                --reporter-options configFile=reporter-config.json
+                                --reporter-options configFile=reporter-config.json 2>/dev/null # Suppress non-error output
 
                             # Generate reports
                             npx mochawesome-merge "${REPORT_DIR}/json/*.json" > "${REPORT_DIR}/mochawesome.json"
@@ -234,13 +228,13 @@ pipeline {
         always {
             archiveArtifacts artifacts: '''
                 cypress/reports/html/*,
-                cypress/reports/pdf/*,
-                cypress/videos/*,
-                cypress/screenshots/**/*
+                cypress/reports/json/*,
+                cypress/reports/pdf/*
             ''', allowEmptyArchive: true
-
-            junit allowEmptyResults: true, testResults: 'cypress/reports/junit/*.xml'
+            junit "${REPORT_DIR}/junit/*.xml"
         }
+    
+
         success {
             echo """
                 ✅ Test Summary:
