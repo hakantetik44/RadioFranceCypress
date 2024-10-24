@@ -11,6 +11,7 @@ pipeline {
         TIMESTAMP = new Date().format('yyyy-MM-dd_HH-mm-ss')
         GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
         GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
+        CYPRESS_VERIFY_TIMEOUT = '120000'
     }
 
     stages {
@@ -38,7 +39,11 @@ pipeline {
                 }
 
                 sh '''
+                    npm cache clean --force
+                    rm -rf node_modules
                     npm ci
+                    npx cypress cache clear
+                    npx cypress verify
                     npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
                 '''
 
@@ -65,15 +70,21 @@ pipeline {
                         echo "🧪 Running Cypress tests..."
 
                         sh '''
-                            npx cypress run \
+                            CYPRESS_VERIFY_TIMEOUT=120000 npx cypress run \
                             --browser electron \
                             --headless \
+                            --config defaultCommandTimeout=10000,pageLoadTimeout=30000,requestTimeout=10000 \
                             2>&1 | sed -r "s/\\x1b\\[[0-9;]*m//g" | tee cypress-output.txt
                         '''
 
                         sh '''
-                            npx mochawesome-merge "cypress/reports/json/*.json" > "cypress/reports/mochawesome.json"
-                            npx marge "cypress/reports/mochawesome.json" --reportDir "cypress/reports/html" --inline
+                            if [ -d "cypress/reports/json" ]; then
+                                npx mochawesome-merge "cypress/reports/json/*.json" > "cypress/reports/mochawesome.json"
+                                npx marge "cypress/reports/mochawesome.json" --reportDir "cypress/reports/html" --inline
+                            else
+                                echo "No test results found in cypress/reports/json"
+                                exit 1
+                            fi
                         '''
 
                         writeFile file: 'createReport.js', text: '''
