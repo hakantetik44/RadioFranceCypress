@@ -21,8 +21,6 @@ pipeline {
                         ╔══════════════════════════════════╗
                         ║         Test Automation          ║
                         ╚══════════════════════════════════╝
-                        
-                        🚀 Starting test execution...
                     """
                 }
 
@@ -49,6 +47,52 @@ pipeline {
                     npx cypress install --force
                     npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
                 '''
+
+                writeFile file: 'cypress.config.js', text: '''
+                    const { defineConfig } = require('cypress')
+
+                    module.exports = defineConfig({
+                        e2e: {
+                            setupNodeEvents(on, config) {
+                                on('task', {
+                                    log(message) {
+                                        console.log(`CYPRESS_LOG: ${message}`)
+                                        return null
+                                    }
+                                })
+                                return config
+                            },
+                            baseUrl: 'https://www.franceculture.fr',
+                            defaultCommandTimeout: 10000,
+                            pageLoadTimeout: 30000,
+                            responseTimeout: 30000,
+                            requestTimeout: 10000,
+                            video: true,
+                            videosFolder: 'cypress/videos',
+                            screenshotOnRunFailure: true,
+                            reporter: 'cypress-multi-reporters',
+                            reporterOptions: {
+                                configFile: 'reporter-config.json'
+                            }
+                        }
+                    })
+                '''
+
+                writeFile file: 'reporter-config.json', text: '''
+                    {
+                        "reporterEnabled": "mochawesome, mocha-junit-reporter",
+                        "mochawesomeReporterOptions": {
+                            "reportDir": "cypress/reports/json",
+                            "overwrite": false,
+                            "html": false,
+                            "json": true
+                        },
+                        "mochaJunitReporterReporterOptions": {
+                            "mochaFile": "cypress/reports/junit/results-[hash].xml",
+                            "toConsole": true
+                        }
+                    }
+                '''
             }
         }
 
@@ -56,16 +100,10 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo """
-                            ╔══════════════════════════════════╗
-                            ║         Test Execution           ║
-                            ╚══════════════════════════════════╝
-                        """
+                        echo "⚡ Running tests..."
 
                         sh '''
                             export CYPRESS_CACHE_FOLDER=${WORKSPACE}/.cypress-cache
-                            
-                            echo "🚀 Starting Tests..."
                             
                             CYPRESS_VERIFY_TIMEOUT=120000 \
                             NO_COLOR=1 \
@@ -74,22 +112,16 @@ pipeline {
                                 --headless \
                                 --config-file cypress.config.js \
                                 --spec "cypress/e2e/RadioFrance.cy.js" \
-                            | grep -v "DevTools" \
-                            | grep -v "tput" \
-                            | grep -v "=" \
-                            | grep -v "Opening" \
-                            | grep -v "\\[" \
-                            | grep -v "Module" \
-                            | grep -v "browser" \
-                            | grep -v "npm" \
-                            | grep -v "Node" \
-                            | grep -v "Searching" \
-                            | grep -v "^$" \
-                            | grep -E "Running:|✓|CYPRESS_LOG:|Passing|Tests|Duration|Fonctionnalités"
+                                2>&1 | grep -E "Running:|✓|CYPRESS_LOG:|Passing|Tests|Duration|Fonctionnalités" \
+                                | grep -v "DevTools" \
+                                | grep -v "Module" \
+                                | grep -v "Node" \
+                                | grep -v "Searching" \
+                                | grep -v "browser" \
+                                | grep -v "device"
 
                             TEST_STATUS=$?
                             
-                            echo "📊 Generating Reports..."
                             if [ -d "cypress/reports/json" ]; then
                                 npx mochawesome-merge "cypress/reports/json/*.json" > "cypress/reports/mochawesome.json"
                                 npx marge "cypress/reports/mochawesome.json" --reportDir "cypress/reports/html" --inline
@@ -102,167 +134,119 @@ pipeline {
                         '''
 
                         writeFile file: 'createReport.js', text: '''
-const fs = require('fs');
-const { jsPDF } = require('jspdf');
+                            const fs = require('fs');
+                            const { jsPDF } = require('jspdf');
 
-// Sabit renkler ve stiller
-const COLORS = {
-    primary: [0, 57, 166],    // Mavi
-    white: [255, 255, 255],
-    black: [0, 0, 0],
-    gray: [247, 247, 247],
-    success: [46, 184, 46],   // Yeşil
-    info: [41, 128, 185],     // Açık mavi
-    warning: [241, 196, 15],  // Sarı
-    text: [74, 85, 104],      // Koyu gri
-    border: [229, 231, 235]   // Açık gri
-};
+                            try {
+                                const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
+                                const doc = new jsPDF({
+                                    orientation: 'portrait',
+                                    unit: 'mm',
+                                    format: 'a4'
+                                });
 
-try {
-    const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-    const doc = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-    });
+                                // Helper function for markdown-like headers
+                                const addHeader = (text, level = 1, yPos) => {
+                                    const fontSize = 24 - (level * 4);
+                                    doc.setFontSize(fontSize);
+                                    return doc.text('#'.repeat(level) + ' ' + text, 20, yPos);
+                                };
 
-    // Header section
-    doc.setFillColor(...COLORS.primary);
-    doc.rect(0, 0, 210, 45, 'F');
+                                const dateStr = new Date().toLocaleDateString('fr-FR', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit',
+                                    second: '2-digit'
+                                }).replace(':', 'h');
 
-    // Title and logo space
-    doc.setTextColor(...COLORS.white);
-    doc.setFontSize(28);
-    doc.text("Rapport d'Execution", 20, 25);
-    doc.setFontSize(20);
-    doc.text("des Tests", 20, 35);
+                                let yPos = 20;
 
-    // Date
-    const dateStr = new Date().toLocaleDateString('fr-FR', {
-        weekday: 'long',
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    }).replace(':', 'h');
-    doc.setFontSize(12);
-    doc.text(dateStr, 130, 25);
+                                addHeader("Rapport d'Exécution des Tests", 1, yPos);
+                                doc.setFontSize(12);
+                                doc.text(dateStr, 20, yPos + 10);
 
-    // Summary boxes section
-    const boxWidth = 40;
-    const boxMargin = 15;
-    let startX = 20;
-    const startY = 55;
+                                yPos += 30;
+                                addHeader("Résumé", 2, yPos);
+                                yPos += 15;
 
-    // Function to create metric box
-    const createMetricBox = (title, value, color, x, y) => {
-        doc.setFillColor(...color);
-        doc.roundedRect(x, y, boxWidth, 35, 3, 3, 'F');
-        doc.setTextColor(...COLORS.white);
-        doc.setFontSize(10);
-        doc.text(title, x + 5, y + 8);
-        doc.setFontSize(16);
-        doc.text(value.toString(), x + 5, y + 25);
-    };
+                                const stats = [
+                                    `Tests Total: ${report.stats.tests}`,
+                                    `Tests Passés: ${report.stats.passes}`,
+                                    `Tests Échoués: ${report.stats.failures || 0}`,
+                                    `Durée: ${(report.stats.duration / 1000).toFixed(2)}s`
+                                ];
 
-    // Create metric boxes
-    createMetricBox('TOTAL', report.stats.tests, COLORS.primary, startX, startY);
-    createMetricBox('PASSÉS', report.stats.passes, COLORS.success, startX + boxWidth + boxMargin, startY);
-    createMetricBox('ÉCHOUÉS', report.stats.failures || 0, [220, 53, 69], startX + (boxWidth + boxMargin) * 2, startY);
-    createMetricBox('DURÉE', Math.round(report.stats.duration/1000) + 's', COLORS.info, startX + (boxWidth + boxMargin) * 3, startY);
+                                stats.forEach(stat => {
+                                    doc.text('- ' + stat, 25, yPos);
+                                    yPos += 10;
+                                });
 
-    // Test details section
-    doc.setTextColor(...COLORS.black);
-    doc.setFontSize(18);
-    doc.text("Résultats Détaillés", 20, 110);
+                                yPos += 10;
+                                addHeader("Résultats Détaillés", 2, yPos);
+                                yPos += 15;
 
-    let yPos = 125;
+                                const suiteName = report.results[0]?.suites[0]?.title || "Test Suite";
+                                addHeader(suiteName, 3, yPos);
+                                yPos += 15;
 
-    // Function to create status badge
-    const createStatusBadge = (status, x, y) => {
-        const color = status ? COLORS.success : [220, 53, 69];
-        const text = status ? '✓' : '✕';
-        doc.setFillColor(...color);
-        doc.circle(x, y, 3, 'F');
-        doc.setTextColor(...color);
-        doc.setFontSize(12);
-        doc.text(text, x - 1.5, y + 1);
-    };
+                                if (report.results && report.results[0]?.suites[0]?.tests) {
+                                    report.results[0].suites[0].tests.forEach((test) => {
+                                        addHeader(test.title, 4, yPos);
+                                        yPos += 10;
+                                        doc.setFontSize(12);
+                                        doc.text(`- Status: ${test.state === 'passed' ? '✅ Passé' : '❌ Échoué'}`, 25, yPos);
+                                        yPos += 10;
+                                        doc.text(`- Durée: ${(test.duration / 1000).toFixed(2)}s`, 25, yPos);
+                                        yPos += 20;
 
-    // Test results with better styling
-    if (report.results && report.results.length > 0) {
-        report.results[0].tests.forEach((test) => {
-            // Background
-            doc.setFillColor(...COLORS.gray);
-            doc.roundedRect(15, yPos - 5, 180, 30, 2, 2, 'F');
+                                        if (yPos > 250) {
+                                            doc.addPage();
+                                            yPos = 20;
+                                        }
+                                    });
+                                }
 
-            // Status and title
-            createStatusBadge(test.pass, 25, yPos + 5);
-            doc.setTextColor(...COLORS.black);
-            doc.setFontSize(11);
-            doc.text(test.title, 35, yPos + 5);
+                                addHeader("Journal d'Exécution", 2, yPos);
+                                yPos += 15;
 
-            // Duration and details
-            doc.setTextColor(...COLORS.text);
-            doc.setFontSize(10);
-            doc.text(`Durée: ${(test.duration / 1000).toFixed(2)}s`, 35, yPos + 15);
+                                const testLogs = [];
+                                report.results[0]?.suites[0]?.tests.forEach(test => {
+                                    if (test.commands) {
+                                        test.commands.forEach(cmd => {
+                                            if (cmd.name === 'task' && cmd.message.includes('CYPRESS_LOG')) {
+                                                const logMessage = cmd.message.replace('CYPRESS_LOG: ', '');
+                                                testLogs.push(logMessage);
+                                            }
+                                        });
+                                    }
+                                });
 
-            const testState = test.pass ? 'SUCCÈS' : 'ÉCHEC';
-            doc.setTextColor(test.pass ? COLORS.success[0] : [220, 53, 69][0]);
-            doc.text(testState, 160, yPos + 5);
+                                testLogs.forEach(log => {
+                                    if (yPos > 250) {
+                                        doc.addPage();
+                                        yPos = 20;
+                                    }
+                                    doc.setFontSize(12);
+                                    if (log.includes('SUCCESS') || log.includes('PASSED')) {
+                                        doc.text(`✅ ${log}`, 20, yPos);
+                                    } else if (log.includes('INFO')) {
+                                        doc.text(`ℹ️ ${log}`, 20, yPos);
+                                    } else {
+                                        doc.text(log, 20, yPos);
+                                    }
+                                    yPos += 8;
+                                });
 
-            yPos += 35;
+                                doc.save(`${process.env.REPORT_DIR}/pdf/report_${process.env.TIMESTAMP}.pdf`);
 
-            if (yPos > 250) {
-                doc.addPage();
-                yPos = 30;
-            }
-        });
-    }
-
-    // Execution log section
-    doc.addPage();
-    doc.setFillColor(...COLORS.primary);
-    doc.rect(0, 0, 210, 25, 'F');
-    doc.setTextColor(...COLORS.white);
-    doc.setFontSize(18);
-    doc.text("Journal d'Exécution", 20, 17);
-
-    // Get logs from test results
-    yPos = 40;
-    const logs = Array.from(new Set(
-        report.results[0].tests.flatMap(test => 
-            test.context ? JSON.parse(test.context).CYPRESS_LOG || [] : []
-        )
-    ));
-
-    logs.forEach((log, index) => {
-        doc.setFillColor(...COLORS.gray);
-        doc.roundedRect(15, yPos - 5, 180, 20, 2, 2, 'F');
-        
-        if (log.includes('SUCCESS') || log.includes('PASSED')) {
-            doc.setTextColor(...COLORS.success);
-            doc.text('✓', 20, yPos + 5);
-        } else if (log.includes('INFO')) {
-            doc.setTextColor(...COLORS.info);
-            doc.text('ℹ', 20, yPos + 5);
-        }
-        
-        doc.setTextColor(...COLORS.black);
-        doc.setFontSize(10);
-        doc.text(log, 30, yPos + 5);
-        yPos += 25;
-    });
-
-    // Save PDF
-    doc.save(`${process.env.REPORT_DIR}/pdf/report_${process.env.TIMESTAMP}.pdf`);
-
-} catch (err) {
-    console.error('Error generating PDF report:', err);
-    process.exit(1);
-}
-'''
+                            } catch (err) {
+                                console.error('Error generating PDF report:', err);
+                                process.exit(1);
+                            }
+                        '''
 
                         sh 'node createReport.js'
 
@@ -300,10 +284,9 @@ try {
                 ✅ Status: SUCCESS
                 ⏱️ Finished: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 
-                📊 Reports Available:
+                📊 Reports:
                 - PDF: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
                 - HTML: ${REPORT_DIR}/html/index.html
-                - Videos: cypress/videos
             """
         }
         failure {
@@ -315,10 +298,9 @@ try {
                 ❌ Status: FAILED
                 ⏱️ Finished: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 
-                📊 Reports Available:
+                📊 Reports:
                 - PDF: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
                 - HTML: ${REPORT_DIR}/html/index.html
-                - Videos: cypress/videos
             """
         }
         cleanup {
