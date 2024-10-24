@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -17,7 +18,13 @@ pipeline {
         stage('Preparation') {
             steps {
                 script {
-                    echo "🚀 Test execution started"
+                    echo """
+                        ╔════════════════════════════════════╗
+                        ║        Test Automation Start       ║
+                        ╚════════════════════════════════════╝
+                        
+                        🚀 Initializing test environment...
+                    """
                 }
 
                 checkout scm
@@ -27,20 +34,33 @@ pipeline {
                     mkdir -p ${REPORT_DIR}/{json,html,pdf,junit}
                     mkdir -p cypress/videos cypress/screenshots
                 """
+
+                echo "✨ Environment setup completed"
             }
         }
 
         stage('Installation') {
             steps {
                 script {
-                    echo "📦 Installing dependencies..."
+                    echo """
+                        ╔════════════════════════════════════╗
+                        ║      Installing Dependencies       ║
+                        ╚════════════════════════════════════╝
+                    """
                 }
 
                 sh '''
                     export CYPRESS_CACHE_FOLDER=${WORKSPACE}/.cypress-cache
+                    echo "🧹 Cleaning previous installations..."
                     rm -rf node_modules
+                    
+                    echo "📦 Installing npm packages..."
                     npm install
+                    
+                    echo "🔧 Installing Cypress..."
                     npx cypress install --force
+                    
+                    echo "📊 Installing test reporters..."
                     npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
                 '''
 
@@ -64,6 +84,8 @@ pipeline {
                             responseTimeout: 30000,
                             requestTimeout: 10000,
                             video: true,
+                            videosFolder: 'cypress/videos',
+                            screenshotOnRunFailure: true,
                             viewportWidth: 1920,
                             viewportHeight: 1080,
                             reporter: 'cypress-multi-reporters',
@@ -89,6 +111,8 @@ pipeline {
                         }
                     }
                 '''
+
+                echo "✅ Installation completed successfully"
             }
         }
 
@@ -96,44 +120,72 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "🧪 Running tests..."
+                        echo """
+                            ╔════════════════════════════════════╗
+                            ║         Test Execution             ║
+                            ╚════════════════════════════════════╝
+                            
+                            🚀 Starting test execution...
+                        """
 
-                        // Run Cypress tests with detailed output
                         sh '''
                             export CYPRESS_CACHE_FOLDER=${WORKSPACE}/.cypress-cache
-                            export TEST_RESULTS=""
-
-                            echo "\\n🔍 Starting test execution...\\n" | tee test-output.txt
-
+                            
+                            echo "⚡ Running Cypress Tests..."
                             CYPRESS_VERIFY_TIMEOUT=120000 npx cypress run \
                                 --browser electron \
                                 --headless \
                                 --config-file cypress.config.js \
                                 --spec "cypress/e2e/RadioFrance.cy.js" \
-                                2>&1 | tee -a test-output.txt | grep -E "Running:|Fonctionnalités|✓|CYPRESS_LOG:|failing|Tests:|Passing:|Duration:|verify|chrome|browser|Running" | tee cypress-output.txt
+                                2>&1 | tee test-output.txt
 
-                            echo "\\n📊 Test execution completed\\n"
+                            TEST_EXIT_CODE=$?
 
-                            # Generate reports if tests ran
+                            # Format test results with icons
+                            if [ -f "test-output.txt" ]; then
+                                echo "📝 Test Results:" > cypress-output.txt
+                                echo "===================" >> cypress-output.txt
+                                
+                                cat test-output.txt | while IFS= read -r line; do
+                                    if [[ $line == *"✓"* ]]; then
+                                        echo "✅ PASSED: ${line#"✓ "}" >> cypress-output.txt
+                                    elif [[ $line == *"CYPRESS_LOG:"* ]]; then
+                                        echo "📋 LOG: ${line#"CYPRESS_LOG: "}" >> cypress-output.txt
+                                    elif [[ $line == *"Running:"* ]]; then
+                                        echo "\\n🔄 ${line}" >> cypress-output.txt
+                                    elif [[ $line == *"Fonctionnalités"* ]]; then
+                                        echo "\\n📦 TEST SUITE: ${line}" >> cypress-output.txt
+                                    elif [[ $line == *"Tests:"* ]]; then
+                                        echo "\\n📊 Test Statistics:" >> cypress-output.txt
+                                        echo "===================" >> cypress-output.txt
+                                        echo "🔍 ${line}" >> cypress-output.txt
+                                    elif [[ $line == *"Passing:"* ]]; then
+                                        echo "✨ ${line}" >> cypress-output.txt
+                                    elif [[ $line == *"Duration:"* ]]; then
+                                        echo "⏱️ ${line}" >> cypress-output.txt
+                                    fi
+                                done
+                            fi
+
+                            # Generate reports
                             if [ -d "cypress/reports/json" ]; then
-                                echo "Generating test reports..."
+                                echo "\\n📈 Generating reports..." | tee -a cypress-output.txt
                                 npx mochawesome-merge "cypress/reports/json/*.json" > "cypress/reports/mochawesome.json"
                                 npx marge "cypress/reports/mochawesome.json" --reportDir "cypress/reports/html" --inline
                             else
-                                echo "No test results found"
+                                echo "\\n❌ No test results found" | tee -a cypress-output.txt
                                 exit 1
                             fi
+
+                            exit $TEST_EXIT_CODE
                         '''
 
-                        // Create PDF Report
                         writeFile file: 'createReport.js', text: '''
                             const fs = require('fs');
                             const { jsPDF } = require('jspdf');
 
                             try {
                                 const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-                                const testOutput = fs.readFileSync('test-output.txt', 'utf8');
-                                
                                 const doc = new jsPDF({
                                     orientation: 'portrait',
                                     unit: 'mm',
@@ -161,7 +213,7 @@ pipeline {
                                 doc.setFontSize(14);
                                 doc.text("Date: " + dateStr.replace(':', 'h'), 15, 35);
 
-                                // Resume Section (Gri background)
+                                // Resume Section
                                 doc.setFillColor(247, 247, 247);
                                 doc.rect(0, 45, 210, 70, 'F');
 
@@ -169,6 +221,7 @@ pipeline {
                                 doc.setFontSize(18);
                                 doc.text("Resume", 15, 65);
 
+                                // Test Summary
                                 doc.setFontSize(14);
                                 const stats = [
                                     `Tests Total: ${report.stats.tests}`,
@@ -181,36 +234,33 @@ pipeline {
                                     doc.text(text, 25, 85 + (index * 12));
                                 });
 
-                                // Resultats Section
+                                // Resultats Detailles Section
                                 doc.setFontSize(18);
                                 doc.text("Resultats Detailles", 15, 140);
-
+                                
                                 doc.setFontSize(16);
                                 doc.text("Fonctionnalites de base de France Culture", 15, 160);
 
-                                // Test Results
+                                // Test Results with boxes
                                 let yPos = 180;
                                 if (report.results && report.results.length > 0) {
-                                    report.results[0].tests.forEach((test, index) => {
-                                        // White box with gray border
+                                    report.results[0].tests.forEach((test) => {
+                                        // White box for each test
                                         doc.setFillColor(255, 255, 255);
                                         doc.rect(15, yPos - 5, 180, 25, 'F');
                                         doc.setDrawColor(220, 220, 220);
                                         doc.rect(15, yPos - 5, 180, 25, 'D');
 
-                                        // Test status and details
+                                        // Test details
                                         doc.setTextColor(46, 184, 46);
                                         doc.setFontSize(12);
                                         doc.text("✓", 20, yPos + 8);
 
                                         doc.setTextColor(0, 0, 0);
                                         doc.text(test.title, 35, yPos + 8);
-                                        doc.setFontSize(11);
-                                        doc.text("Durée: " + (test.duration / 1000).toFixed(2) + "s", 35, yPos + 18);
+                                        doc.text(`Durée: ${(test.duration / 1000).toFixed(2)}s`, 35, yPos + 18);
 
                                         yPos += 35;
-
-                                        // Add new page if needed
                                         if (yPos > 250) {
                                             doc.addPage();
                                             yPos = 30;
@@ -218,17 +268,15 @@ pipeline {
                                     });
                                 }
 
-                                // Execution Log Section
+                                // Journal d'Execution Section
                                 doc.addPage();
-                                
                                 doc.setFillColor(247, 247, 247);
                                 doc.rect(0, 0, 210, 30, 'F');
                                 
-                                doc.setFontSize(18);
                                 doc.setTextColor(0, 0, 0);
+                                doc.setFontSize(18);
                                 doc.text("Journal d'Execution", 15, 20);
 
-                                // Detailed logs
                                 let logPos = 50;
                                 doc.setFontSize(12);
                                 const logs = [
@@ -267,6 +315,11 @@ pipeline {
                         '''
 
                         sh 'node createReport.js'
+
+                        echo """
+                            ✅ Test execution completed successfully!
+                            =====================================
+                        """
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
                         throw e
@@ -293,18 +346,24 @@ pipeline {
             script {
                 def testOutput = readFile('cypress-output.txt').trim()
                 echo """
-                    ✅ Test Execution Summary
-                    ----------------------
-                    Status: SUCCESS
-                    Finished: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                    ╔════════════════════════════════════╗
+                    ║       Test Execution Summary       ║
+                    ╚════════════════════════════════════╝
                     
-                    Test Steps:
+                    ✅ Final Status: SUCCESS
+                    ⏰ Completed at: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                    
+                    📝 Test Results:
+                    ===============
                     ${testOutput}
                     
-                    Reports Available:
-                    - PDF Report: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
-                    - HTML Report: ${REPORT_DIR}/html/index.html
-                    - Videos: cypress/videos
+                    📊 Reports Available:
+                    ==================
+                    📑 PDF Report: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
+                    🌐 HTML Report: ${REPORT_DIR}/html/index.html
+                    🎥 Test Videos: cypress/videos
+                    
+                    ✨ All tests completed successfully! ✨
                 """
             }
         }
@@ -312,15 +371,24 @@ pipeline {
             script {
                 def testOutput = readFile('cypress-output.txt').trim()
                 echo """
-                    ❌ Test Execution Summary
-                    ----------------------
-                    Status: FAILED
-                    Finished: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                    ╔════════════════════════════════════╗
+                    ║       Test Execution Summary       ║
+                    ╚════════════════════════════════════╝
                     
-                    Test Steps:
+                    ❌ Final Status: FAILED
+                    ⏰ Completed at: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                    
+                    📝 Test Results:
+                    ===============
                     ${testOutput}
                     
-                    Please check the reports for details.
+                    📊 Reports Available:
+                    ==================
+                    📑 PDF Report: ${REPORT_DIR}/pdf/report_${TIMESTAMP}.pdf
+                    🌐 HTML Report: ${REPORT_DIR}/html/index.html
+                    🎥 Test Videos: cypress/videos
+                    
+                    ⚠️ Some tests failed! Please check the reports for details ⚠️
                 """
             }
         }
