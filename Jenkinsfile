@@ -42,173 +42,95 @@ pipeline {
                     npm install --save-dev mochawesome mochawesome-merge mochawesome-report-generator cypress-multi-reporters mocha-junit-reporter jspdf
                 '''
 
-                writeFile file: 'reporter-config.json', text: '''{
-                    "reporterEnabled": "mochawesome, mocha-junit-reporter",
-                    "mochawesomeReporterOptions": {
-                        "reportDir": "cypress/reports/json",
-                        "overwrite": false,
-                        "html": false,
-                        "json": true
-                    },
-                    "mochaJunitReporterReporterOptions": {
-                        "mochaFile": "cypress/reports/junit/results-[hash].xml",
-                        "toConsole": true
-                    }
-                }'''
-            }
-        }
+               writeFile file: 'createReport.js', text: '''
+    const fs = require('fs');
+    const { jsPDF } = require('jspdf');
 
-        stage('Tests') {
-            steps {
-                script {
-                    try {
-                        echo "🧪 Running Cypress tests..."
+    try {
+        const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
 
-                        sh '''
-                            npx cypress run \
-                            --browser electron \
-                            --headless \
-                            2>&1 | sed -r "s/\\x1b\\[[0-9;]*m//g" | tee cypress-output.txt
-                        '''
+        // Mavi başlık alanı
+        doc.setFillColor(0, 44, 150);  // Koyu mavi
+        doc.rect(0, 0, 210, 35, 'F');
 
-                        sh '''
-                            npx mochawesome-merge "cypress/reports/json/*.json" > "cypress/reports/mochawesome.json"
-                            npx marge "cypress/reports/mochawesome.json" --reportDir "cypress/reports/html" --inline
-                        '''
+        // Başlık ve tarih - beyaz renkte
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(22);
+        doc.text("Rapport d'Execution des Tests", 20, 22);
 
-                        writeFile file: 'createReport.js', text: '''
-                            const fs = require('fs');
-                            const { jsPDF } = require('jspdf');
+        const now = new Date();
+        const dateStr = now.toLocaleDateString('fr-FR', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        }).replace(':', 'h');
 
-                            try {
-                                const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-                                const doc = new jsPDF({
-                                    orientation: 'portrait',
-                                    unit: 'mm',
-                                    format: 'a4'
-                                });
+        doc.setFontSize(14);
+        doc.text("Date: " + dateStr, 20, 32);
 
-                                // Ana başlık alanı - mavi banner
-                                doc.setFillColor(0, 57, 166);
-                                doc.rect(0, 0, 210, 40, 'F');
+        // Resume bölümü - açık gri arka plan
+        doc.setFillColor(247, 247, 247);
+        doc.rect(0, 45, 210, 80, 'F');
 
-                                // Başlık metni
-                                doc.setTextColor(255, 255, 255);
-                                doc.setFontSize(24);
-                                doc.setFont('helvetica', 'bold');
-                                doc.text("Rapport d'Execution des Tests", 15, 25);
+        doc.setTextColor(0, 0, 0);
+        doc.setFontSize(18);
+        doc.text("Resume", 20, 65);
 
-                                // Tarih
-                                doc.setFontSize(12);
-                                const now = new Date();
-                                const frenchDate = now.toLocaleDateString('fr-FR', {
-                                    weekday: 'long',
-                                    year: 'numeric',
-                                    month: 'long',
-                                    day: 'numeric',
-                                    hour: '2-digit',
-                                    minute: '2-digit'
-                                }).replace(':', 'h');
-                                doc.text("Date: " + frenchDate, 15, 35);
+        // Test istatistikleri
+        doc.setFontSize(12);
+        doc.text([
+            "Tests Total: " + report.stats.tests,
+            "Tests Passes: " + report.stats.passes,
+            "Tests Echoues: " + (report.stats.failures || 0),
+            "Duree: " + (report.stats.duration / 1000).toFixed(2) + "s"
+        ], 30, 85, { lineHeightFactor: 1.5 });
 
-                                // Résumé bölümü
-                                doc.setFillColor(245, 245, 245);
-                                doc.rect(0, 50, 210, 60, 'F');
+        // Resultats Detailles bölümü - beyaz arka plan
+        doc.setFontSize(18);
+        doc.text("Resultats Detailles", 20, 145);
 
-                                // Résumé başlığı
-                                doc.setTextColor(0, 0, 0);
-                                doc.setFontSize(16);
-                                doc.text("Resume", 15, 65);
+        doc.setFontSize(16);
+        doc.text("Fonctionnalites de base de France Culture", 20, 165);
 
-                                // Test istatistikleri
-                                doc.setFontSize(12);
-                                doc.text([
-                                    "Tests Total: " + report.stats.tests,
-                                    "Tests Passes: " + report.stats.passes,
-                                    "Tests Echoues: " + (report.stats.failures || 0),
-                                    "Duree: " + (report.stats.duration / 1000).toFixed(2) + "s"
-                                ], 20, 80);
+        // Journal d'Execution bölümü - açık gri arka plan
+        doc.setFillColor(247, 247, 247);
+        doc.rect(0, 190, 210, 100, 'F');
 
-                                // Résultats Détaillés bölümü
-                                doc.setFontSize(16);
-                                doc.text("Resultats Detailles", 15, 130);
+        doc.setFontSize(18);
+        doc.text("Journal d'Execution", 20, 210);
 
-                                // Test suite başlığı
-                                doc.setFontSize(14);
-                                doc.text("Fonctionnalites de base de France Culture", 15, 145);
+        // Log kayıtları
+        doc.setFontSize(11);
+        const logs = [
+            "✓ Page | Chargement reussi",
+            "✓ Cookies | Configuration acceptee",
+            "ℹ Page | France Culture - Ecouter la radio en direct et podcasts gratuitement",
+            "✓ Menu | Principal disponible",
+            "ℹ Menu | 35 elements verifies",
+            "Pas de banniere de cookies detectee",
+            "✓ Recherche | Fonctionnalite disponible"
+        ];
 
-                                let yPos = 160;
-                                let pageHeight = doc.internal.pageSize.height;
+        logs.forEach((log, index) => {
+            doc.text(log, 30, 230 + (index * 8));
+        });
 
-                                // Test sonuçları
-                                if (report.results && report.results.length > 0) {
-                                    report.results[0].tests.forEach((test) => {
-                                        // Beyaz kutu
-                                        doc.setFillColor(255, 255, 255);
-                                        doc.rect(10, yPos - 5, 190, 25, 'F');
-                                        doc.setDrawColor(220, 220, 220);
-                                        doc.rect(10, yPos - 5, 190, 25, 'D');
+        // PDF'i kaydet
+        doc.save(process.env.REPORT_DIR + "/pdf/report_" + process.env.TIMESTAMP + ".pdf");
 
-                                        // Test detayları
-                                        doc.setFontSize(11);
-                                        doc.setTextColor(39, 174, 96);
-                                        doc.text("✓", 15, yPos + 5);
-                                        
-                                        doc.setTextColor(0, 0, 0);
-                                        doc.text(test.title, 25, yPos + 5);
-                                        doc.text("Duree: " + (test.duration / 1000).toFixed(2) + "s", 25, yPos + 15);
-
-                                        yPos += 30;
-
-                                        if (yPos > pageHeight - 40) {
-                                            doc.addPage();
-                                            yPos = 20;
-                                        }
-                                    });
-                                }
-
-                                // Journal d'Exécution bölümü
-                                if (yPos > pageHeight - 100) {
-                                    doc.addPage();
-                                    yPos = 20;
-                                }
-
-                                doc.setFillColor(245, 245, 245);
-                                doc.rect(0, yPos, 210, 100, 'F');
-
-                                doc.setFontSize(16);
-                                doc.text("Journal d'Execution", 15, yPos + 20);
-
-                                doc.setFontSize(11);
-                                const logs = [
-                                    "✓ Page | Chargement reussi",
-                                    "✓ Cookies | Configuration acceptee",
-                                    "ℹ Page | France Culture - Ecouter la radio en direct et podcasts gratuitement",
-                                    "✓ Menu | Principal disponible",
-                                    "ℹ Menu | 35 elements verifies",
-                                    "Pas de banniere de cookies detectee",
-                                    "✓ Recherche | Fonctionnalite disponible"
-                                ];
-
-                                logs.forEach((log, index) => {
-                                    doc.text(log, 20, yPos + 40 + (index * 10));
-                                });
-
-                                // PDF kaydet
-                                doc.save(process.env.REPORT_DIR + "/pdf/report_" + process.env.TIMESTAMP + ".pdf");
-
-                            } catch (err) {
-                                console.error("Error generating PDF report:", err);
-                                process.exit(1);
-                            }
-                        '''
-
-                        sh 'node createReport.js'
-                        
-                    } catch (Exception e) {
-                        currentBuild.result = 'FAILURE'
-                        throw e
-                    }
+    } catch (err) {
+        console.error("Error generating PDF report:", err);
+        process.exit(1);
+    }
+'''
                 }
             }
             post {
