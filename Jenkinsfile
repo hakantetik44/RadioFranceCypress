@@ -93,8 +93,8 @@ pipeline {
 
                     function createReport(testResults) {
                         return {
-                            title: "🎯 Rapport d'Exécution des Tests",
-                            date: new Date().toLocaleString('fr-FR', { 
+                            title: "🎯 Test Execution Report",
+                            date: new Date().toLocaleString('en-US', { 
                                 weekday: 'long',
                                 year: 'numeric',
                                 month: 'long',
@@ -141,28 +141,28 @@ pipeline {
                                     <p>Date: ${report.date}</p>
                                 </div>
                                 <div class="summary">
-                                    <h2>📊 Résumé</h2>
-                                    <p>Tests Total: ${report.summary.total}</p>
-                                    <p>Tests Passés: ${report.summary.passed}</p>
-                                    <p>Tests Échoués: ${report.summary.failed}</p>
-                                    <p>Durée: ${report.summary.duration}s</p>
+                                    <h2>📊 Summary</h2>
+                                    <p>Total Tests: ${report.summary.total}</p>
+                                    <p>Passed Tests: ${report.summary.passed}</p>
+                                    <p>Failed Tests: ${report.summary.failed}</p>
+                                    <p>Duration: ${report.summary.duration}s</p>
                                 </div>
                                 <div class="results">
-                                    <h2>🔍 Résultats Détaillés</h2>
+                                    <h2>🔍 Detailed Results</h2>
                                     ${report.results.map(suite => `
                                         <div class="suite">
                                             <h3>${suite.title}</h3>
                                             ${suite.tests.map(test => `
                                                 <div class="test">
                                                     <p>${test.status} ${test.title}</p>
-                                                    <p>Durée: ${test.duration}s</p>
-                                                    ${test.error ? `<p style="color: red">Erreur: ${test.error}</p>` : ''}
+                                                    <p>Duration: ${test.duration}s</p>
+                                                    ${test.error ? `<p style="color: red">Error: ${test.error}</p>` : ''}
                                                 </div>`).join('')}
                                         </div>`
                                     ).join('')}
                                 </div>
                                 <div class="logs">
-                                    <h2>📝 Journal d'Exécution</h2>
+                                    <h2>📝 Execution Log</h2>
                                     ${uniqueLogs.map(log => `<p>${log}</p>`).join('')}
                                 </div>
                             </body>
@@ -257,7 +257,6 @@ pipeline {
                 - Check the reports for details
                 """
         }
-    
 
         cleanup {
             cleanWs()
