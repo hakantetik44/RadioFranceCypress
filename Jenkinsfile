@@ -8,7 +8,7 @@ pipeline {
     environment {
         CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
         REPORT_DIR = "cypress/reports"
-        TIMESTAMP = new Date().format('yyyy-MM-dd_HH-mm-ss')
+        TIMESTAMP = "${new Date().format('yyyy-MM-dd_HH-mm-ss')}"
         GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
         GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
         TEST_HISTORY_DIR = "${WORKSPACE}/test-history"
@@ -29,8 +29,8 @@ pipeline {
                     mkdir -p cypress/{videos,screenshots,logs}
                     mkdir -p ${TEST_HISTORY_DIR}
 
-                    touch "${TEST_HISTORY_DIR}/history.csv"
-                    if [ ! -s "${TEST_HISTORY_DIR}/history.csv" ]; then
+                    # Initialize history file if it doesn't exist
+                    if [ ! -f "${TEST_HISTORY_DIR}/history.csv" ]; then
                         echo "BuildNumber,Timestamp,TotalTests,PassedTests,Duration" > "${TEST_HISTORY_DIR}/history.csv"
                     fi
                 '''
@@ -73,16 +73,10 @@ pipeline {
                     async function generatePDF() {
                         try {
                             const testResults = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-                            
-                            // Check if the log file exists before reading
                             const logFilePath = 'cypress/logs/test-execution.log';
-                            const logs = fs.existsSync(logFilePath) ? fs.readFileSync(logFilePath, 'utf8')
-                                .split('\\n')
-                                .filter(line => line.trim()) : []; // If the log doesn't exist, use an empty array
-
+                            const logs = fs.existsSync(logFilePath) ? fs.readFileSync(logFilePath, 'utf8').split('\\n').filter(line => line.trim()) : [];
                             const uniqueLogs = [...new Set(logs)];
                             const report = createReport(testResults);
-
                             const htmlContent = generateHTMLContent(report, uniqueLogs);
                             await savePDF(htmlContent);
                         } catch (error) {
@@ -94,7 +88,7 @@ pipeline {
                     function createReport(testResults) {
                         return {
                             title: "🎯 Test Execution Report",
-                            date: new Date().toLocaleString('en-US', { 
+                            date: new Date().toLocaleString('en-US', {
                                 weekday: 'long',
                                 year: 'numeric',
                                 month: 'long',
@@ -200,8 +194,10 @@ pipeline {
                             export LANG=en_US.UTF-8
                             export LC_ALL=en_US.UTF-8
 
+                            # Verify Cypress installation
                             VERIFY_TIMEOUT=120000 npx cypress verify
 
+                            # Run Cypress tests
                             CYPRESS_VERIFY_TIMEOUT=120000 npx cypress run \
                                 --browser chrome \
                                 --headless \
