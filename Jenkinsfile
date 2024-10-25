@@ -46,7 +46,7 @@ pipeline {
                 sh '''
                     npm cache clean --force
                     npm ci
-                    npm install --save-dev cypress-multi-reporters mocha-junit-reporter mochawesome mochawesome-merge mochawesome-report-generator jspdf
+                    npm install --save-dev cypress-multi-reporters mocha-junit-reporter mochawesome mochawesome-merge mochawesome-report-generator puppeteer markdown-pdf
                 '''
 
                 writeFile file: 'reporter-config.json', text: '''
@@ -66,122 +66,127 @@ pipeline {
                     }
                 '''
 
-                writeFile file: 'createReport.js', text: '''
-    const fs = require('fs');
-    const { jsPDF } = require('jspdf');
+                writeFile file: 'generateReport.js', text: '''
+                    const fs = require('fs');
+                    const puppeteer = require('puppeteer');
 
-    try {
-        const report = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-        const doc = new jsPDF({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: 'a4'
-        });
+                    async function generatePDF() {
+                        try {
+                            const testResults = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
+                            
+                            // Check if the log file exists before reading
+                            const logFilePath = 'cypress/logs/test-execution.log';
+                            const logs = fs.existsSync(logFilePath) ? fs.readFileSync(logFilePath, 'utf8')
+                                .split('\\n')
+                                .filter(line => line.trim()) : []; // If the log doesn't exist, use an empty array
 
-        // Başlık
-        doc.setFontSize(24);
-        doc.text("# Rapport d'Exécution des Tests", 20, 20);
+                            const uniqueLogs = [...new Set(logs)];
+                            const report = createReport(testResults);
 
-        // Tarih
-        const now = new Date();
-        const dateStr = now.toLocaleDateString('fr-FR', {
-            weekday: 'long',
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        }).replace(':', 'h');
-
-        doc.setFontSize(14);
-        doc.text(dateStr, 20, 30);
-
-        // Résumé
-        doc.setFontSize(18);
-        doc.text("## Résumé", 20, 50);
-        doc.setFontSize(12);
-        doc.text([
-            "- Tests Total: " + report.stats.tests,
-            "- Tests Passés: " + report.stats.passes,
-            "- Tests Échoués: " + (report.stats.failures || 0),
-            "- Durée: " + (report.stats.duration / 1000).toFixed(2) + "s"
-        ], 20, 65);
-
-        // Résultats Détaillés
-        doc.setFontSize(18);
-        doc.text("## Résultats Détaillés", 20, 95);
-        doc.text("### Fonctionnalités de base de France Culture", 20, 105);
-
-        let yPos = 120;
-
-        if (report.results && report.results.length > 0) {
-            report.results[0].tests.forEach(test => {
-                doc.setFontSize(14);
-                doc.text("#### " + test.title, 20, yPos);
-                yPos += 10;
-
-                doc.setFontSize(12);
-                doc.text([
-                    "- Status: " + (test.state === 'passed' ? '✅ Passé' : '❌ Échoué'),
-                    "- Durée: " + (test.duration / 1000).toFixed(2) + "s"
-                ], 20, yPos);
-                yPos += 20;
-
-                if (yPos > 250) {
-                    doc.addPage();
-                    yPos = 20;
-                }
-            });
-        }
-
-        // Journal d'Exécution
-        doc.addPage();
-        doc.setFontSize(18);
-        doc.text("## Journal d'Exécution", 20, 20);
-        yPos = 40;
-
-        // Logları test sonuçlarından al
-        const logs = [];
-        report.results[0].tests.forEach(test => {
-            if (test.context) {
-                try {
-                    const testContext = JSON.parse(test.context);
-                    if (testContext.CYPRESS_LOG) {
-                        logs.push(...testContext.CYPRESS_LOG.split('\\n'));
+                            const htmlContent = generateHTMLContent(report, uniqueLogs);
+                            await savePDF(htmlContent);
+                        } catch (error) {
+                            console.error('Error generating report:', error.message);
+                            process.exit(1);
+                        }
                     }
-                } catch(e) {}
-            }
-        });
 
-        // Unique logları filtrele ve sırala
-        const uniqueLogs = [...new Set(logs)];
-        uniqueLogs.forEach(log => {
-            if (log.startsWith('SUCCESS') || log.includes('✅')) {
-                doc.setTextColor(0, 150, 0);
-                doc.text("✅ " + log.replace('SUCCESS', '').trim(), 20, yPos);
-            } else if (log.startsWith('INFO') || log.includes('ℹ️')) {
-                doc.setTextColor(0, 100, 200);
-                doc.text("ℹ️ " + log.replace('INFO', '').trim(), 20, yPos);
-            } else {
-                doc.setTextColor(0, 0, 0);
-                doc.text(log, 20, yPos);
-            }
-            yPos += 8;
+                    function createReport(testResults) {
+                        return {
+                            title: "🎯 Rapport d'Exécution des Tests",
+                            date: new Date().toLocaleString('fr-FR', { 
+                                weekday: 'long',
+                                year: 'numeric',
+                                month: 'long',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                            }),
+                            summary: {
+                                total: testResults.stats.tests,
+                                passed: testResults.stats.passes,
+                                failed: testResults.stats.failures,
+                                duration: (testResults.stats.duration / 1000).toFixed(2)
+                            },
+                            results: testResults.results[0].suites.map(suite => ({
+                                title: suite.title,
+                                tests: suite.tests.map(test => ({
+                                    title: test.title,
+                                    status: test.state === 'passed' ? '✅' : '❌',
+                                    duration: (test.duration / 1000).toFixed(2),
+                                    error: test.err ? test.err.message : null
+                                }))
+                            }))
+                        };
+                    }
 
-            if (yPos > 250) {
-                doc.addPage();
-                yPos = 20;
-            }
-        });
+                    function generateHTMLContent(report, uniqueLogs) {
+                        return `
+                            <!DOCTYPE html>
+                            <html>
+                            <head>
+                                <meta charset="UTF-8">
+                                <style>
+                                    body { font-family: Arial, sans-serif; padding: 20px; }
+                                    .header { background: #0047AB; color: white; padding: 20px; border-radius: 5px; }
+                                    .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                                    .results { margin: 20px 0; }
+                                    .test { margin: 10px 0; padding: 10px; background: #fff; border: 1px solid #eee; }
+                                    .logs { background: #f8f9fa; padding: 15px; border-radius: 5px; }
+                                </style>
+                            </head>
+                            <body>
+                                <div class="header">
+                                    <h1>${report.title}</h1>
+                                    <p>Date: ${report.date}</p>
+                                </div>
+                                <div class="summary">
+                                    <h2>📊 Résumé</h2>
+                                    <p>Tests Total: ${report.summary.total}</p>
+                                    <p>Tests Passés: ${report.summary.passed}</p>
+                                    <p>Tests Échoués: ${report.summary.failed}</p>
+                                    <p>Durée: ${report.summary.duration}s</p>
+                                </div>
+                                <div class="results">
+                                    <h2>🔍 Résultats Détaillés</h2>
+                                    ${report.results.map(suite => `
+                                        <div class="suite">
+                                            <h3>${suite.title}</h3>
+                                            ${suite.tests.map(test => `
+                                                <div class="test">
+                                                    <p>${test.status} ${test.title}</p>
+                                                    <p>Durée: ${test.duration}s</p>
+                                                    ${test.error ? `<p style="color: red">Erreur: ${test.error}</p>` : ''}
+                                                </div>`).join('')}
+                                        </div>`
+                                    ).join('')}
+                                </div>
+                                <div class="logs">
+                                    <h2>📝 Journal d'Exécution</h2>
+                                    ${uniqueLogs.map(log => `<p>${log}</p>`).join('')}
+                                </div>
+                            </body>
+                            </html>
+                        `;
+                    }
 
-        doc.save(`${process.env.REPORT_DIR}/pdf/report_${process.env.TIMESTAMP}.pdf`);
+                    async function savePDF(htmlContent) {
+                        const browser = await puppeteer.launch({
+                            args: ['--no-sandbox', '--disable-setuid-sandbox']
+                        });
+                        const page = await browser.newPage();
+                        await page.setContent(htmlContent);
+                        await page.pdf({
+                            path: 'cypress/reports/pdf/report.pdf',
+                            format: 'A4',
+                            margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+                            printBackground: true
+                        });
+                        await browser.close();
+                    }
 
-    } catch (err) {
-        console.error('Error generating PDF report:', err);
-        process.exit(1);
-    }
-'''
+                    generatePDF();
+                '''
             }
         }
 
@@ -190,35 +195,34 @@ pipeline {
                 script {
                     try {
                         echo "🧪 Running Cypress tests..."
-                        
+
                         sh '''
                             export LANG=en_US.UTF-8
                             export LC_ALL=en_US.UTF-8
-                            
+
                             VERIFY_TIMEOUT=120000 npx cypress verify
-                            
-                            CYPRESS_VERIFY_TIMEOUT=120000 \\
-                            npx cypress run \\
-                                --browser electron \\
-                                --headless \\
-                                --config video=true \\
-                                --reporter cypress-multi-reporters \\
+
+                            CYPRESS_VERIFY_TIMEOUT=120000 npx cypress run \
+                                --browser chrome \
+                                --headless \
+                                --config video=true \
+                                --reporter cypress-multi-reporters \
                                 --reporter-options configFile=reporter-config.json
 
                             # Generate reports
                             npx mochawesome-merge "${REPORT_DIR}/json/*.json" > "${REPORT_DIR}/mochawesome.json"
-                            npx marge \\
-                                "${REPORT_DIR}/mochawesome.json" \\
-                                --reportDir "${REPORT_DIR}/html" \\
-                                --inline \\
-                                --charts \\
+                            npx marge "${REPORT_DIR}/mochawesome.json" \
+                                --reportDir "${REPORT_DIR}/html" \
+                                --inline \
+                                --charts \
                                 --title "France Culture Test Results"
 
                             # Generate PDF report
-                            node createReport.js
+                            node generateReport.js
                         '''
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
+                        echo "Tests encountered an error: ${e.getMessage()}"
                         throw e
                     }
                 }
@@ -229,9 +233,9 @@ pipeline {
     post {
         always {
             archiveArtifacts artifacts: '''
-                cypress/reports/html/**/*,
+                cypress/reports/html/*,
                 cypress/reports/pdf/*,
-                cypress/videos/**/*,
+                cypress/videos/*,
                 cypress/screenshots/**/*
             ''', allowEmptyArchive: true
 
@@ -242,7 +246,7 @@ pipeline {
                 ✅ Test Summary:
                 - Status: SUCCESS
                 - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Report PDF: cypress/reports/pdf/report_${TIMESTAMP}.pdf
+                - Report PDF: cypress/reports/pdf/report.pdf
                 """
         }
         failure {
@@ -253,6 +257,8 @@ pipeline {
                 - Check the reports for details
                 """
         }
+    
+
         cleanup {
             cleanWs()
         }
