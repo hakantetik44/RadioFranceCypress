@@ -78,39 +78,37 @@ pipeline {
                             format: 'a4'
                         });
 
-                        // Mavi başlık alanı
-                        doc.setFillColor(0, 57, 166);  // Koyu mavi
+                        // Header - Mavi banner
+                        doc.setFillColor(0, 57, 166);
                         doc.rect(0, 0, 210, 30, 'F');
 
-                        // Logo ve başlık
+                        // Başlık
                         doc.setTextColor(255, 255, 255);
                         doc.setFontSize(24);
-                        doc.text('Rapport d\'Execution des Tests', 12, 20);
+                        doc.text("Rapport d'Execution des Tests", 12, 20);
 
-                        // Tarih (başlık altında)
+                        // Tarih
                         const now = new Date();
                         const dateStr = now.toLocaleDateString('fr-FR', {
                             weekday: 'long',
                             year: 'numeric',
                             month: 'long',
-                            day: 'numeric'
-                        });
-                        const timeStr = now.toLocaleTimeString('fr-FR', {
+                            day: 'numeric',
                             hour: '2-digit',
                             minute: '2-digit'
-                        });
-                        doc.text(`Date: ${dateStr} à ${timeStr}`, 12, 28);
+                        }).replace(':', 'h');
+                        
+                        doc.setFontSize(14);
+                        doc.text("Date: " + dateStr, 12, 28);
 
                         // Résumé bölümü
-                        doc.setFillColor(245, 245, 245);  // Açık gri
+                        doc.setFillColor(245, 245, 245);
                         doc.rect(0, 35, 210, 50, 'F');
 
-                        // Résumé başlık
                         doc.setTextColor(0, 0, 0);
-                        doc.setFontSize(20);
-                        doc.text('Résumé', 12, 50);
+                        doc.setFontSize(18);
+                        doc.text("Résumé", 12, 50);
 
-                        // Test sonuçları
                         doc.setFontSize(14);
                         doc.text([
                             `Tests Total: ${report.stats.tests}`,
@@ -119,28 +117,36 @@ pipeline {
                             `Durée: ${(report.stats.duration / 1000).toFixed(2)}s`
                         ], 12, 65);
 
-                        // Résultats Détaillés bölümü
-                        doc.text('Résultats Détaillés', 12, 105);
-                        doc.text('Fonctionnalités de base de France Culture', 12, 120);
+                        // Détaillés bölümü
+                        doc.setFontSize(18);
+                        doc.text("Résultats Détaillés", 12, 105);
+                        doc.text("Fonctionnalités de base de France Culture", 12, 120);
 
-                        let yPos = 135;
+                        let yPos = 140;
                         if (report.results && report.results.length > 0) {
-                            report.results[0].tests.forEach((test) => {
-                                // Beyaz arka plan
-                                doc.setFillColor(255, 255, 255);
-                                doc.setDrawColor(220, 220, 220);
-                                doc.rect(10, yPos - 5, 190, 25, 'FD');
+                            report.results[0].tests.forEach(test => {
+                                doc.setFontSize(14);
+                                doc.text(test.title, 12, yPos);
 
-                                // Test sonucu
+                                doc.setFontSize(12);
                                 doc.setTextColor(34, 197, 94);  // Yeşil
-                                doc.text('✓', 15, yPos + 5);
-
-                                // Test başlığı
+                                doc.text(`Status: ✓ ${test.state}`, 15, yPos + 7);
                                 doc.setTextColor(0, 0, 0);
-                                doc.text(test.title, 25, yPos + 5);
-                                doc.text(`Durée: ${(test.duration / 1000).toFixed(2)}s`, 25, yPos + 15);
+                                doc.text(`Durée: ${(test.duration / 1000).toFixed(2)}s`, 15, yPos + 14);
+                                
+                                // Test loglarını al
+                                if (test.context) {
+                                    try {
+                                        const testContext = JSON.parse(test.context);
+                                        if (testContext.CYPRESS_LOG) {
+                                            doc.text(testContext.CYPRESS_LOG, 15, yPos + 21);
+                                        }
+                                    } catch (e) {
+                                        console.log('Error parsing test context:', e);
+                                    }
+                                }
 
-                                yPos += 30;
+                                yPos += 35;
 
                                 if (yPos > 250) {
                                     doc.addPage();
@@ -150,37 +156,39 @@ pipeline {
                         }
 
                         // Journal d'Exécution bölümü
-                        doc.setFillColor(245, 245, 245);
-                        doc.rect(0, yPos, 210, 120, 'F');
-
+                        doc.addPage();
                         doc.setFontSize(18);
-                        doc.text('Journal d\'Exécution', 12, yPos + 15);
+                        doc.text("Journal d'Exécution", 12, 30);
 
-                        // Log kayıtları
-                        yPos += 30;
-                        doc.setFontSize(12);
-                        const logs = [
-                            'Page France Culture chargée',
-                            'Pas de bannière de cookies détectée',
-                            'ℹ️ Page | France Culture – Écouter la radio en direct et podcasts gratuitement',
-                            'Page France Culture chargée',
-                            '✅ Cookies | Acceptés',
-                            '✅ Menu | Principal trouvé',
-                            'ℹ️ Menu | 35 éléments trouvés',
-                            'Page France Culture chargée',
-                            '✅ Cookies | Acceptés',
-                            '✅ Recherche | Fonctionnalité disponible'
-                        ];
+                        yPos = 50;
+                        const logs = report.results[0].tests.reduce((acc, test) => {
+                            if (test.context) {
+                                try {
+                                    const testContext = JSON.parse(test.context);
+                                    if (testContext.CYPRESS_LOG) {
+                                        acc.push(testContext.CYPRESS_LOG);
+                                    }
+                                } catch (e) {}
+                            }
+                            return acc;
+                        }, []);
 
                         logs.forEach((log, index) => {
-                            if (log.startsWith('✅')) {
-                                doc.setTextColor(34, 197, 94);  // Yeşil
-                            } else if (log.startsWith('ℹ️')) {
-                                doc.setTextColor(41, 128, 185);  // Mavi
+                            if (log.includes('SUCCESS') || log.includes('PASSED')) {
+                                doc.setTextColor(34, 197, 94);
+                                doc.text('✓', 12, yPos);
+                                doc.setTextColor(0, 0, 0);
+                                doc.text(log.replace('SUCCESS', '').replace('PASSED', '').trim(), 20, yPos);
+                            } else if (log.includes('INFO')) {
+                                doc.setTextColor(41, 128, 185);
+                                doc.text('ℹ', 12, yPos);
+                                doc.setTextColor(0, 0, 0);
+                                doc.text(log.replace('INFO', '').trim(), 20, yPos);
                             } else {
                                 doc.setTextColor(0, 0, 0);
+                                doc.text(log, 12, yPos);
                             }
-                            doc.text(log, 15, yPos + (index * 10));
+                            yPos += 8;
                         });
 
                         doc.save(`${process.env.REPORT_DIR}/pdf/report_${process.env.TIMESTAMP}.pdf`);
@@ -250,7 +258,7 @@ pipeline {
                 ✅ Test Summary:
                 - Status: SUCCESS
                 - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Report PDF: cypress/reports/pdf/report.pdf
+                - Report PDF: cypress/reports/pdf/report_${TIMESTAMP}.pdf
                 """
         }
         failure {
