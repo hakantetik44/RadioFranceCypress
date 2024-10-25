@@ -73,7 +73,7 @@ pipeline {
                     async function generatePDF() {
                         try {
                             const testResults = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
-                            
+
                             // Check if the log file exists before reading
                             const logFilePath = 'cypress/logs/test-execution.log';
                             const logs = fs.existsSync(logFilePath) ? fs.readFileSync(logFilePath, 'utf8')
@@ -114,7 +114,8 @@ pipeline {
                                     title: test.title,
                                     status: test.state === 'passed' ? '✅' : '❌',
                                     duration: (test.duration / 1000).toFixed(2),
-                                    error: test.err ? test.err.message : null
+                                    error: test.err ? test.err.message : null,
+                                    logs: test.logs || []  // Logları buradan alıyoruz
                                 }))
                             }))
                         };
@@ -133,6 +134,10 @@ pipeline {
                                     .results { margin: 20px 0; }
                                     .test { margin: 10px 0; padding: 10px; background: #fff; border: 1px solid #eee; }
                                     .logs { background: #f8f9fa; padding: 15px; border-radius: 5px; }
+                                    .log { margin-left: 20px; }
+                                    .success { color: green; }
+                                    .failure { color: red; }
+                                    .test-icon { margin-right: 5px; }
                                 </style>
                             </head>
                             <body>
@@ -154,9 +159,18 @@ pipeline {
                                             <h3>${suite.title}</h3>
                                             ${suite.tests.map(test => `
                                                 <div class="test">
-                                                    <p>${test.status} ${test.title}</p>
+                                                    <span class="test-icon">${test.status === '✅' ? '🟢' : '🔴'}</span>
+                                                    <strong>${test.title}</strong>
                                                     <p>Durée: ${test.duration}s</p>
                                                     ${test.error ? `<p style="color: red">Erreur: ${test.error}</p>` : ''}
+                                                    <div class="logs">
+                                                        <h4>Logs:</h4>
+                                                        ${test.logs.map(log => `
+                                                            <div class="log ${test.status === '✅' ? 'success' : 'failure'}">
+                                                                ${test.status === '✅' ? '✅' : '❌'} ${log}
+                                                            </div>
+                                                        `).join('')}
+                                                    </div>
                                                 </div>`).join('')}
                                         </div>`
                                     ).join('')}
