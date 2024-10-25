@@ -2,157 +2,236 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'Node.js 22.9' // Kullanılacak Node.js versiyonu
+        // Node.js versiyonunu burada belirtiyoruz
+        nodejs 'Node.js 22.9'
     }
+
     environment {
-        TERM = 'xterm' // Terminal ayarları
+        CYPRESS_CACHE_FOLDER = "${WORKSPACE}/.cypress-cache"
+        REPORT_DIR = "cypress/reports"
+        TIMESTAMP = "${new Date().format('yyyy-MM-dd_HH-mm-ss')}"
+        GIT_COMMIT_MSG = sh(script: 'git log -1 --pretty=%B', returnStdout: true).trim()
+        GIT_AUTHOR = sh(script: 'git log -1 --pretty=%an', returnStdout: true).trim()
+        TEST_HISTORY_DIR = "${WORKSPACE}/test-history"
     }
+
     stages {
-        stage('🔄 Clean Workspace') {
+        stage('Preparation') {
             steps {
                 script {
-                    echo "🧹 Cleaning up workspace..."
-                    cleanWs() // Workspace temizleme
-                    echo "🗑️ Workspace cleaned."
+                    echo "🚀 Starting the test pipeline"
                 }
+
+                checkout scm
+
+                sh '''
+                    mkdir -p ${CYPRESS_CACHE_FOLDER}
+                    mkdir -p ${REPORT_DIR}/{json,html,pdf}
+                    mkdir -p cypress/{videos,screenshots,logs}
+                    mkdir -p ${TEST_HISTORY_DIR}
+
+                    # Initialize history file if it doesn't exist
+                    if [ ! -f "${TEST_HISTORY_DIR}/history.csv" ]; then
+                        echo "BuildNumber,Timestamp,TotalTests,PassedTests,Duration" > "${TEST_HISTORY_DIR}/history.csv"
+                    fi
+                '''
             }
         }
 
-        stage('📥 Checkout Code') {
+        stage('Installation') {
             steps {
                 script {
-                    echo "📥 Checking out code from repository..."
-                    checkout scm // Kaynak kodu kontrol etme
-                    echo "✅ Code checked out."
-                }
-            }
-        }
-
-        stage('🛠️ Setup Environment') {
-            steps {
-                script {
-                    echo "🌍 Setting up environment..."
-                    // Node.js kurulumu (belirtilen versiyonda)
                     echo "📦 Installing Node.js..."
+
+                    // Install NVM and Node.js
                     sh '''
-                    curl -fsSL https://deb.nodesource.com/setup_14.x | sudo -E bash -
-                    sudo apt-get install -y nodejs
+                        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+                        export NVM_DIR="$HOME/.nvm"
+                        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+                        nvm install 22.9
+                        nvm use 22.9
                     '''
-                    echo "✅ Node.js installed."
+
+                    // Install project dependencies
+                    sh '''
+                        npm cache clean --force
+                        npm ci
+                        npm install --save-dev cypress-multi-reporters mocha-junit-reporter mochawesome mochawesome-merge mochawesome-report-generator puppeteer markdown-pdf
+                    '''
+
+                    writeFile file: 'reporter-config.json', text: '''
+                        {
+                            "reporterEnabled": "spec, mocha-junit-reporter, mochawesome",
+                            "mochaJunitReporterReporterOptions": {
+                                "mochaFile": "cypress/reports/junit/results-[hash].xml"
+                            },
+                            "mochawesomeReporterOptions": {
+                                "reportDir": "cypress/reports/json",
+                                "overwrite": false,
+                                "html": true,
+                                "json": true,
+                                "timestamp": true,
+                                "reportTitle": "France Culture Test Results"
+                            }
+                        }
+                    '''
+
+                    writeFile file: 'generateReport.js', text: '''
+                        const fs = require('fs');
+                        const puppeteer = require('puppeteer');
+
+                        async function generatePDF() {
+                            try {
+                                const testResults = JSON.parse(fs.readFileSync('cypress/reports/mochawesome.json', 'utf8'));
+                                const logFilePath = 'cypress/logs/test-execution.log';
+                                const logs = fs.existsSync(logFilePath) ? fs.readFileSync(logFilePath, 'utf8').split('\\n').filter(line => line.trim()) : [];
+                                const uniqueLogs = [...new Set(logs)];
+                                const report = createReport(testResults);
+                                const htmlContent = generateHTMLContent(report, uniqueLogs);
+                                await savePDF(htmlContent);
+                            } catch (error) {
+                                console.error('Error generating report:', error.message);
+                                process.exit(1);
+                            }
+                        }
+
+                        function createReport(testResults) {
+                            return {
+                                title: "🎯 Test Execution Report",
+                                date: new Date().toLocaleString('en-US', {
+                                    weekday: 'long',
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                }),
+                                summary: {
+                                    total: testResults.stats.tests,
+                                    passed: testResults.stats.passes,
+                                    failed: testResults.stats.failures,
+                                    duration: (testResults.stats.duration / 1000).toFixed(2)
+                                },
+                                results: testResults.results[0].suites.map(suite => ({
+                                    title: suite.title,
+                                    tests: suite.tests.map(test => ({
+                                        title: test.title,
+                                        status: test.state === 'passed' ? '✅' : '❌',
+                                        duration: (test.duration / 1000).toFixed(2),
+                                        error: test.err ? test.err.message : null
+                                    }))
+                                }))
+                            };
+                        }
+
+                        function generateHTMLContent(report, uniqueLogs) {
+                            return `
+                                <!DOCTYPE html>
+                                <html>
+                                <head>
+                                    <meta charset="UTF-8">
+                                    <style>
+                                        body { font-family: Arial, sans-serif; padding: 20px; }
+                                        .header { background: #0047AB; color: white; padding: 20px; border-radius: 5px; }
+                                        .summary { background: #f5f5f5; padding: 15px; border-radius: 5px; margin: 20px 0; }
+                                        .results { margin: 20px 0; }
+                                        .test { margin: 10px 0; padding: 10px; background: #fff; border: 1px solid #eee; }
+                                        .logs { background: #f8f9fa; padding: 15px; border-radius: 5px; }
+                                    </style>
+                                </head>
+                                <body>
+                                    <div class="header">
+                                        <h1>${report.title}</h1>
+                                        <p>Date: ${report.date}</p>
+                                    </div>
+                                    <div class="summary">
+                                        <h2>📊 Summary</h2>
+                                        <p>Total Tests: ${report.summary.total}</p>
+                                        <p>Passed Tests: ${report.summary.passed}</p>
+                                        <p>Failed Tests: ${report.summary.failed}</p>
+                                        <p>Duration: ${report.summary.duration}s</p>
+                                    </div>
+                                    <div class="results">
+                                        <h2>🔍 Detailed Results</h2>
+                                        ${report.results.map(suite => `
+                                            <div class="suite">
+                                                <h3>${suite.title}</h3>
+                                                ${suite.tests.map(test => `
+                                                    <div class="test">
+                                                        <p>${test.status} ${test.title}</p>
+                                                        <p>Duration: ${test.duration}s</p>
+                                                        ${test.error ? `<p style="color: red">Error: ${test.error}</p>` : ''}
+                                                    </div>`).join('')}
+                                            </div>`
+                                        ).join('')}
+                                    </div>
+                                    <div class="logs">
+                                        <h2>📝 Execution Log</h2>
+                                        ${uniqueLogs.map(log => `<p>${log}</p>`).join('')}
+                                    </div>
+                                </body>
+                                </html>
+                            `;
+                        }
+
+                        async function savePDF(htmlContent) {
+                            const browser = await puppeteer.launch({
+                                args: ['--no-sandbox', '--disable-setuid-sandbox']
+                            });
+                            const page = await browser.newPage();
+                            await page.setContent(htmlContent);
+                            await page.pdf({
+                                path: 'cypress/reports/pdf/report.pdf',
+                                format: 'A4',
+                                margin: { top: '20px', right: '20px', bottom: '20px', left: '20px' },
+                                printBackground: true
+                            });
+                            await browser.close();
+                        }
+
+                        generatePDF();
+                    '''
                 }
             }
         }
 
-        stage('📦 Install Dependencies') {
+        stage('Tests') {
             steps {
                 script {
-                    echo "🔍 Installing dependencies..."
-                    sh 'npm install' // Bağımlılıkları yükleme
-                    echo "✅ Dependencies installed."
-                }
-            }
-        }
-
-        stage('⚙️ Build Project') {
-            steps {
-                script {
-                    echo "🔧 Building the project..."
-                    sh 'npm run build' // Projeyi derleme
-                    echo "✅ Project built successfully."
-                }
-            }
-        }
-
-        stage('🚀 Run Tests') {
-            steps {
-                script {
-                    echo "🚀 Starting tests..."
                     try {
+                        echo "🧪 Running Cypress tests..."
+
                         sh '''
-                        #!/bin/bash
-                        set -e
-                        echo "🔍 Running Cypress tests..."
-                        npx cypress run --headless --browser chrome // Cypress testlerini çalıştırma
+                            export LANG=en_US.UTF-8
+                            export LC_ALL=en_US.UTF-8
+
+                            # Verify Cypress installation
+                            VERIFY_TIMEOUT=120000 npx cypress verify
+
+                            # Run Cypress tests
+                            CYPRESS_VERIFY_TIMEOUT=120000 npx cypress run \
+                                --browser chrome \
+                                --headless \
+                                --config video=true \
+                                --reporter cypress-multi-reporters \
+                                --reporter-options configFile=reporter-config.json
+
+                            # Generate reports
+                            npx mochawesome-merge "${REPORT_DIR}/json/*.json" > "${REPORT_DIR}/mochawesome.json"
+                            npx marge "${REPORT_DIR}/mochawesome.json" \
+                                --reportDir "${REPORT_DIR}/html" \
+                                --inline \
+                                --charts \
+                                --title "France Culture Test Results"
+
+                            # Generate PDF report
+                            node generateReport.js
                         '''
                     } catch (Exception e) {
-                        echo "❌ Tests failed: ${e.message}"
-                        currentBuild.result = 'FAILURE' // Testler başarısız olursa durumu ayarlama
+                        currentBuild.result = 'FAILURE'
+                        echo "Tests encountered an error: ${e.getMessage()}"
+                        throw e
                     }
-                    echo "✅ Tests completed."
-                }
-            }
-        }
-
-        stage('📊 Analyze Results') {
-            steps {
-                script {
-                    echo "📊 Analyzing test results..."
-                    sh 'npm run test:report' // Test raporlarını analiz etme
-                    echo "✅ Results analyzed."
-                }
-            }
-        }
-
-        stage('📦 Package Application') {
-            steps {
-                script {
-                    echo "📦 Packaging the application..."
-                    sh 'npm run package' // Uygulamayı paketleme
-                    echo "✅ Application packaged."
-                }
-            }
-        }
-
-        stage('🚀 Deploy to Staging') {
-            steps {
-                script {
-                    echo "🚀 Deploying to staging environment..."
-                    sh '''
-                    echo "🔄 Deploying..."
-                    ./deploy.sh staging // Staging ortamına dağıtım
-                    '''
-                    echo "✅ Deployed to staging."
-                }
-            }
-        }
-
-        stage('📦 Publish Artifacts') {
-            steps {
-                script {
-                    echo "📦 Publishing artifacts..."
-                    archiveArtifacts artifacts: '**/dist/**/*', fingerprint: true // Artifact'leri yayınlama
-                    echo "✅ Artifacts published."
-                }
-            }
-        }
-
-        stage('🔧 Perform Lint Checks') {
-            steps {
-                script {
-                    echo "🔧 Running lint checks..."
-                    sh 'npm run lint' // Lint kontrolleri yapma
-                    echo "✅ Lint checks passed."
-                }
-            }
-        }
-
-        stage('🧹 Cleanup Resources') {
-            steps {
-                script {
-                    echo "🧹 Cleaning up resources..."
-                    sh 'rm -rf node_modules' // Node modüllerini silme
-                    echo "✅ Resources cleaned up."
-                }
-            }
-        }
-
-        stage('🔔 Final Notifications') {
-            steps {
-                script {
-                    echo "🔔 Sending notifications..."
-                    // Örnek bildirim komutu
-                    sh 'curl -X POST -H "Content-Type: application/json" -d \'{"text": "Build complete!"}\' https://hooks.slack.com/services/...' 
-                    echo "✅ Notifications sent."
                 }
             }
         }
@@ -160,34 +239,28 @@ pipeline {
 
     post {
         always {
-            echo "📦 Archiving test results..."
             archiveArtifacts artifacts: '''
                 cypress/reports/html/*,
                 cypress/reports/pdf/*,
                 cypress/videos/*,
                 cypress/screenshots/**/*
-            ''', allowEmptyArchive: true // Test sonuçlarını arşivleme
+            ''', allowEmptyArchive: true
 
-            junit allowEmptyResults: true, testResults: 'cypress/reports/junit/*.xml' // JUnit sonuçlarını analiz etme
+            junit allowEmptyResults: true, testResults: 'cypress/reports/junit/*.xml'
         }
         success {
             echo """
                 ✅ Test Summary:
                 - Status: SUCCESS
-                - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Report PDF: cypress/reports/pdf/report.pdf
-                """
+                - End: ${env.BUILD_TIMESTAMP}
+            """
         }
         failure {
             echo """
                 ❌ Test Summary:
                 - Status: FAILED
-                - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                - Check the reports for details
-                """
-        }
-        cleanup {
-            cleanWs() // Çalışma alanını temizleme
+                - End: ${env.BUILD_TIMESTAMP}
+            """
         }
     }
 }
