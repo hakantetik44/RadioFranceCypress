@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     tools {
-        // Node.js versiyonunu burada belirtiyoruz
+        // Node.js versiyonu burada belirleniyor
         nodejs 'Node.js 22.9'
     }
 
@@ -47,7 +47,7 @@ pipeline {
                     sh '''
                         curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
                         export NVM_DIR="$HOME/.nvm"
-                        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+                        [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
                         nvm install 22.9
                         nvm use 22.9
                     '''
@@ -228,9 +228,8 @@ pipeline {
                             node generateReport.js
                         '''
                     } catch (Exception e) {
+                        echo "❌ Test execution failed: ${e.message}"
                         currentBuild.result = 'FAILURE'
-                        echo "Tests encountered an error: ${e.getMessage()}"
-                        throw e
                     }
                 }
             }
@@ -239,14 +238,16 @@ pipeline {
 
     post {
         always {
-            archiveArtifacts artifacts: '''
-                cypress/reports/html/*,
-                cypress/reports/pdf/*,
-                cypress/videos/*,
-                cypress/screenshots/**/*
-            ''', allowEmptyArchive: true
-
-            junit allowEmptyResults: true, testResults: 'cypress/reports/junit/*.xml'
+            archiveArtifacts artifacts: "${REPORT_DIR}/html/**, ${REPORT_DIR}/pdf/**", allowEmptyArchive: true
+            echo """
+                📅 Build Summary:
+                - Commit: ${env.GIT_COMMIT}
+                - Message: ${env.GIT_COMMIT_MSG}
+                - Author: ${env.GIT_AUTHOR}
+                - Duration: ${currentBuild.durationString}
+                - Status: ${currentBuild.currentResult}
+                - End: ${env.BUILD_TIMESTAMP}
+            """
         }
         success {
             echo """
