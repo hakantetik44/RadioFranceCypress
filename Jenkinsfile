@@ -15,100 +15,94 @@ pipeline {
     stages {
         stage('Preparation') {
             steps {
-                node('any') {
-                    echo "🚀 Starting the test pipeline"
-                    cleanWs()
-                    checkout scm
+                echo "🚀 Starting the test pipeline"
+                cleanWs()
+                checkout scm
 
-                    bat """
-                        if not exist "${CYPRESS_CACHE_FOLDER}" mkdir "${CYPRESS_CACHE_FOLDER}"
-                        if not exist "${REPORT_DIR}\\json" mkdir "${REPORT_DIR}\\json"
-                        if not exist "${REPORT_DIR}\\html" mkdir "${REPORT_DIR}\\html"
-                        if not exist "${REPORT_DIR}\\pdf" mkdir "${REPORT_DIR}\\pdf"
-                        if not exist "cypress\\videos" mkdir "cypress\\videos"
-                        if not exist "cypress\\screenshots" mkdir "cypress\\screenshots"
-                        if not exist "cypress\\logs" mkdir "cypress\\logs"
-                        if not exist "${TEST_HISTORY_DIR}" mkdir "${TEST_HISTORY_DIR}"
+                bat """
+                    if not exist "${CYPRESS_CACHE_FOLDER}" mkdir "${CYPRESS_CACHE_FOLDER}"
+                    if not exist "${REPORT_DIR}\\json" mkdir "${REPORT_DIR}\\json"
+                    if not exist "${REPORT_DIR}\\html" mkdir "${REPORT_DIR}\\html"
+                    if not exist "${REPORT_DIR}\\pdf" mkdir "${REPORT_DIR}\\pdf"
+                    if not exist "cypress\\videos" mkdir "cypress\\videos"
+                    if not exist "cypress\\screenshots" mkdir "cypress\\screenshots"
+                    if not exist "cypress\\logs" mkdir "cypress\\logs"
+                    if not exist "${TEST_HISTORY_DIR}" mkdir "${TEST_HISTORY_DIR}"
 
-                        if not exist "${TEST_HISTORY_DIR}\\history.csv" (
-                            echo BuildNumber,Timestamp,TotalTests,PassedTests,Duration > "${TEST_HISTORY_DIR}\\history.csv"
-                        )
-                    """
-                }
+                    if not exist "${TEST_HISTORY_DIR}\\history.csv" (
+                        echo BuildNumber,Timestamp,TotalTests,PassedTests,Duration > "${TEST_HISTORY_DIR}\\history.csv"
+                    )
+                """
             }
         }
 
         stage('Installation') {
             steps {
-                node('any') {
-                    echo "📦 Installing dependencies..."
+                echo "📦 Installing dependencies..."
 
-                    bat """
-                        call npm cache clean --force
-                        call npm ci
-                        call npm install --save-dev cypress-multi-reporters mocha-junit-reporter mochawesome mochawesome-merge mochawesome-report-generator puppeteer markdown-pdf
-                    """
+                bat """
+                    call npm cache clean --force
+                    call npm ci || call npm install
+                    call npm install --save-dev cypress-multi-reporters mocha-junit-reporter mochawesome mochawesome-merge mochawesome-report-generator puppeteer markdown-pdf
+                """
 
-                    writeFile file: 'reporter-config.json', text: '''
-                        {
-                            "reporterEnabled": "spec, mocha-junit-reporter, mochawesome",
-                            "mochaJunitReporterReporterOptions": {
-                                "mochaFile": "cypress/reports/junit/results-[hash].xml"
-                            },
-                            "mochawesomeReporterOptions": {
-                                "reportDir": "cypress/reports/json",
-                                "overwrite": false,
-                                "html": true,
-                                "json": true,
-                                "timestamp": true,
-                                "reportTitle": "France Culture Test Results"
-                            }
+                writeFile file: 'reporter-config.json', text: '''
+                    {
+                        "reporterEnabled": "spec, mocha-junit-reporter, mochawesome",
+                        "mochaJunitReporterReporterOptions": {
+                            "mochaFile": "cypress/reports/junit/results-[hash].xml"
+                        },
+                        "mochawesomeReporterOptions": {
+                            "reportDir": "cypress/reports/json",
+                            "overwrite": false,
+                            "html": true,
+                            "json": true,
+                            "timestamp": true,
+                            "reportTitle": "France Culture Test Results"
                         }
-                    '''
+                    }
+                '''
 
-                    writeFile file: 'generateReport.js', text: '''
-                        const fs = require('fs');
-                        const puppeteer = require('puppeteer');
-                        // ... (generateReport.js içeriğinin geri kalanı aynı kalacak)
-                    '''
-                }
+                writeFile file: 'generateReport.js', text: '''
+                    const fs = require('fs');
+                    const puppeteer = require('puppeteer');
+                    // ... (generateReport.js içeriğinin geri kalanı aynı kalacak)
+                '''
             }
         }
 
         stage('Tests') {
             steps {
-                node('any') {
-                    script {
-                        try {
-                            echo "🧪 Running Cypress tests..."
+                script {
+                    try {
+                        echo "🧪 Running Cypress tests..."
 
-                            bat """
-                                set VERIFY_TIMEOUT=120000
-                                call npx cypress verify
+                        bat """
+                            set VERIFY_TIMEOUT=120000
+                            call npx cypress verify
 
-                                set CYPRESS_VERIFY_TIMEOUT=120000
-                                call npx cypress run ^
-                                    --browser chrome ^
-                                    --headless ^
-                                    --config video=true ^
-                                    --reporter cypress-multi-reporters ^
-                                    --reporter-options configFile=reporter-config.json
+                            set CYPRESS_VERIFY_TIMEOUT=120000
+                            call npx cypress run ^
+                                --browser chrome ^
+                                --headless ^
+                                --config video=true ^
+                                --reporter cypress-multi-reporters ^
+                                --reporter-options configFile=reporter-config.json
 
-                                :: Generate reports
-                                call npx mochawesome-merge "%REPORT_DIR%\\json\\*.json" > "%REPORT_DIR%\\mochawesome.json"
-                                call npx marge "%REPORT_DIR%\\mochawesome.json" ^
-                                    --reportDir "%REPORT_DIR%\\html" ^
-                                    --inline ^
-                                    --charts ^
-                                    --title "France Culture Test Results"
+                            :: Generate reports
+                            call npx mochawesome-merge "%REPORT_DIR%\\json\\*.json" > "%REPORT_DIR%\\mochawesome.json"
+                            call npx marge "%REPORT_DIR%\\mochawesome.json" ^
+                                --reportDir "%REPORT_DIR%\\html" ^
+                                --inline ^
+                                --charts ^
+                                --title "France Culture Test Results"
 
-                                :: Generate PDF report
-                                call node generateReport.js
-                            """
-                        } catch (Exception e) {
-                            currentBuild.result = 'FAILURE'
-                            error "Tests failed: ${e.getMessage()}"
-                        }
+                            :: Generate PDF report
+                            call node generateReport.js
+                        """
+                    } catch (Exception e) {
+                        currentBuild.result = 'FAILURE'
+                        error "Tests failed: ${e.getMessage()}"
                     }
                 }
             }
@@ -117,41 +111,33 @@ pipeline {
 
     post {
         always {
-            node('any') {
-                archiveArtifacts artifacts: '''
-                    cypress/reports/html/**/*,
-                    cypress/reports/pdf/**/*,
-                    cypress/videos/**/*,
-                    cypress/screenshots/**/*
-                ''', allowEmptyArchive: true
+            archiveArtifacts artifacts: '''
+                cypress/reports/html/**/*,
+                cypress/reports/pdf/**/*,
+                cypress/videos/**/*,
+                cypress/screenshots/**/*
+            ''', allowEmptyArchive: true
 
-                junit allowEmptyResults: true, testResults: 'cypress/reports/junit/*.xml'
-            }
+            junit allowEmptyResults: true, testResults: 'cypress/reports/junit/*.xml'
         }
         success {
-            node('any') {
-                echo """
-                    ✅ Test Summary:
-                    - Status: SUCCESS
-                    - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                    - Report PDF: cypress/reports/pdf/report.pdf
-                """
-            }
+            echo """
+                ✅ Test Summary:
+                - Status: SUCCESS
+                - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                - Report PDF: cypress/reports/pdf/report.pdf
+            """
         }
         failure {
-            node('any') {
-                echo """
-                    ❌ Test Summary:
-                    - Status: FAILED
-                    - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
-                    - Check the reports for details
-                """
-            }
+            echo """
+                ❌ Test Summary:
+                - Status: FAILED
+                - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
+                - Check the reports for details
+            """
         }
         cleanup {
-            node('any') {
-                cleanWs()
-            }
+            cleanWs()
         }
     }
 }
