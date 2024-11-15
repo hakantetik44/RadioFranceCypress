@@ -10,16 +10,27 @@ pipeline {
         REPORT_DIR = "cypress\\reports"
         TIMESTAMP = new Date().format('yyyy-MM-dd_HH-mm-ss')
         TEST_HISTORY_DIR = "${WORKSPACE}\\test-history"
+        // Windows için karakter seti ayarları
+        LANG = 'en_US.UTF-8'
+        LANGUAGE = 'en_US:en'
+        LC_ALL = 'en_US.UTF-8'
+        // Jenkins konsolu için çıktı encoding
+        JENKINS_CONSOLE_ENCODING = 'UTF-8'
     }
 
     stages {
         stage('Preparation') {
             steps {
-                echo "🚀 Starting the test pipeline"
+                echo "[INFO] Starting the test pipeline"
                 cleanWs()
                 checkout scm
 
                 bat """
+                    @echo off
+                    chcp 65001 > nul
+                    
+                    echo [INFO] Creating directories...
+                    
                     if not exist "${CYPRESS_CACHE_FOLDER}" mkdir "${CYPRESS_CACHE_FOLDER}"
                     if not exist "${REPORT_DIR}\\json" mkdir "${REPORT_DIR}\\json"
                     if not exist "${REPORT_DIR}\\html" mkdir "${REPORT_DIR}\\html"
@@ -38,11 +49,19 @@ pipeline {
 
         stage('Installation') {
             steps {
-                echo "📦 Installing dependencies..."
+                echo "[INFO] Installing dependencies..."
 
                 bat """
+                    @echo off
+                    chcp 65001 > nul
+                    
+                    echo [INFO] Cleaning npm cache...
                     call npm cache clean --force
+                    
+                    echo [INFO] Installing npm packages...
                     call npm ci || call npm install
+                    
+                    echo [INFO] Installing Cypress dependencies...
                     call npm install --save-dev cypress-multi-reporters mocha-junit-reporter mochawesome mochawesome-merge mochawesome-report-generator puppeteer markdown-pdf
                 """
 
@@ -75,12 +94,17 @@ pipeline {
             steps {
                 script {
                     try {
-                        echo "🧪 Running Cypress tests..."
+                        echo "[INFO] Running Cypress tests..."
 
                         bat """
+                            @echo off
+                            chcp 65001 > nul
+                            
+                            echo [INFO] Setting up Cypress environment...
                             set VERIFY_TIMEOUT=120000
                             call npx cypress verify
 
+                            echo [INFO] Running Cypress tests...
                             set CYPRESS_VERIFY_TIMEOUT=120000
                             call npx cypress run ^
                                 --browser chrome ^
@@ -89,20 +113,22 @@ pipeline {
                                 --reporter cypress-multi-reporters ^
                                 --reporter-options configFile=reporter-config.json
 
-                            :: Generate reports
+                            echo [INFO] Generating reports...
                             call npx mochawesome-merge "%REPORT_DIR%\\json\\*.json" > "%REPORT_DIR%\\mochawesome.json"
+                            
+                            echo [INFO] Creating HTML report...
                             call npx marge "%REPORT_DIR%\\mochawesome.json" ^
                                 --reportDir "%REPORT_DIR%\\html" ^
                                 --inline ^
                                 --charts ^
                                 --title "France Culture Test Results"
 
-                            :: Generate PDF report
+                            echo [INFO] Generating PDF report...
                             call node generateReport.js
                         """
                     } catch (Exception e) {
                         currentBuild.result = 'FAILURE'
-                        error "Tests failed: ${e.getMessage()}"
+                        error "[ERROR] Tests failed: ${e.getMessage()}"
                     }
                 }
             }
@@ -122,7 +148,7 @@ pipeline {
         }
         success {
             echo """
-                ✅ Test Summary:
+                [SUCCESS] Test Summary:
                 - Status: SUCCESS
                 - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 - Report PDF: cypress/reports/pdf/report.pdf
@@ -130,7 +156,7 @@ pipeline {
         }
         failure {
             echo """
-                ❌ Test Summary:
+                [ERROR] Test Summary:
                 - Status: FAILED
                 - End: ${new Date().format('dd/MM/yyyy HH:mm:ss')}
                 - Check the reports for details
